@@ -1,0 +1,29 @@
+# C++ / CMake
+/build/
+*.exe
+*.o
+*.obj
+*.pdb
+*.ilk
+
+# Python
+/venv/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# PyInstaller
+/dist/
+
+# IDEs
+.vscode/
+
+# Project specific results/temp files
+schedule.ics
+exp.html
+
+# OS specific
+.DS_Store
+Thumbs.db

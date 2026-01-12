@@ -7,6 +7,9 @@
 #### Windows
 请确保已安装 CMake 和 C++ 编译器 (如 MinGW-w64)，运行：
 ```bash
+cd build                                                                                                      
+cmake .. -G "MinGW Makefiles"
+cmake --build .
 ./build_dist.bat
 ```
 

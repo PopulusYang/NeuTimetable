@@ -1,3 +1,11 @@
+/**
+ * @file NeuCourseTabel.cpp
+ * @author PopulusYang
+ * @brief NEU Course Table Parser and ICS Generator
+ * @license MIT
+ * @date 2026-01-12
+ */
+
 #include <ctime>
 #include <fstream>
 #include <iomanip>
@@ -47,7 +55,7 @@ struct Course
   string title;
   string location;
   string description;
-  int day; 
+  int day;
   int startPeriod;
   int endPeriod;
   vector<int> weeks;
@@ -114,7 +122,7 @@ parseWeeks (string s)
   return weeks;
 }
 
-//位置
+// 位置
 string
 formatLocation (string s)
 {
@@ -127,7 +135,6 @@ formatLocation (string s)
     }
   return trim (s);
 }
-
 
 string
 addDays (string startDate, int days)

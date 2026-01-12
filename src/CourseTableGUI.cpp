@@ -1,3 +1,11 @@
+/**
+ * @file CourseTableGUI.cpp
+ * @author PopulusYang
+ * @brief Windows Native GUI for NEU Course Table Tool
+ * @license MIT
+ * @date 2026-01-12
+ */
+
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -146,7 +154,6 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             std::wstring fullPath (path);
             size_t pos_path = fullPath.find_last_of (L"\\/");
             std::wstring dir = fullPath.substr (0, pos_path + 1);
-
 
             std::wstring cmd = L"\"" + dir + L"NeuCourseTabel.exe\" " + date;
 

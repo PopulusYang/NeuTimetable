@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+# Author: PopulusYang
+# License: MIT
+# Project: NEU Course Table Scraper
+
 import sys
 import time
 from selenium import webdriver

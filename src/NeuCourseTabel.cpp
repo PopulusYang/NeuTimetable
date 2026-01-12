@@ -47,7 +47,7 @@ struct Course
   string title;
   string location;
   string description;
-  int day; // 0=Sun, 1=Mon, ..., 6=Sat
+  int day; 
   int startPeriod;
   int endPeriod;
   vector<int> weeks;
@@ -114,7 +114,7 @@ parseWeeks (string s)
   return weeks;
 }
 
-// 清理地点：保留从“校区”开始的部分
+//位置
 string
 formatLocation (string s)
 {
@@ -128,7 +128,7 @@ formatLocation (string s)
   return trim (s);
 }
 
-// Simple date calculation
+
 string
 addDays (string startDate, int days)
 {

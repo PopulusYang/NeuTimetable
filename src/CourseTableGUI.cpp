@@ -105,7 +105,6 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
             std::wstring scraperPy = dir + L"neuscraper_ui.py";
             std::wstring pythonExe = dir + L"venv\\Scripts\\python.exe";
 
-            // 1. 优先尝试运行已打包的 exe (完全脱离 Python)
             DWORD dwAttribExe = GetFileAttributes (scraperExe.c_str ());
             if (dwAttribExe != INVALID_FILE_ATTRIBUTES
                 && !(dwAttribExe & FILE_ATTRIBUTE_DIRECTORY))
@@ -115,7 +114,6 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SetWindowText (hStatus,
                                L"已启动 (独立运行模式)。请在浏览器中操作。");
               }
-            // 2. 其次尝试 venv 环境中的 python
             else
               {
                 DWORD dwAttribVenv = GetFileAttributes (pythonExe.c_str ());
@@ -143,17 +141,15 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
             SetWindowText (hStatus, L"正在解析并生成日历...");
 
-            // 获取当前程序所在目录
             wchar_t path[MAX_PATH];
             GetModuleFileName (NULL, path, MAX_PATH);
             std::wstring fullPath (path);
             size_t pos_path = fullPath.find_last_of (L"\\/");
             std::wstring dir = fullPath.substr (0, pos_path + 1);
 
-            // 构造完整命令行参数 (使用绝对路径并添加引号)
+
             std::wstring cmd = L"\"" + dir + L"NeuCourseTabel.exe\" " + date;
 
-            // 运行可执行文件
             STARTUPINFO si = { sizeof (si) };
             PROCESS_INFORMATION pi;
             if (CreateProcess (NULL, (LPWSTR)cmd.c_str (), NULL, NULL, FALSE,

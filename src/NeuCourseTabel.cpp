@@ -232,70 +232,75 @@ getTime (int period, bool isStart)
 int
 main (int argc, char *argv[])
 {
-  ifstream file ("exp.html");
+  ifstream file ("exp.html"); // 打开抓取的 HTML 文件
   if (!file.is_open ())
     {
       cerr << "无法打开 exp.html" << endl;
-      return 1;
+      return 1; // 文件打开失败退出
     }
   string content ((istreambuf_iterator<char> (file)),
-                  istreambuf_iterator<char> ());
-  file.close ();
+                  istreambuf_iterator<char> ()); // 读取全部内容
+  file.close ();                                 // 关闭文件
 
-  string colMark = "kbappTimetableDayColumnRoot";
-  vector<string> dayHtmls;
-  size_t lastPos = 0;
+  string colMark = "kbappTimetableDayColumnRoot"; // 定义每一列课表的标记
+  vector<string> dayHtmls;                        // 存储每一天的 HTML 片段
+  size_t lastPos = 0;                             // 上一次查找的位置
   while (true)
     {
-      size_t pos = content.find (colMark, lastPos);
+      size_t pos = content.find (colMark, lastPos); // 查找列标记
       if (pos == string::npos)
-        break;
-      size_t startDiv = content.rfind ("<div", pos);
-      size_t nextPos = content.find (colMark, pos + colMark.length ());
+        break;                                       // 找不到了则退出循环
+      size_t startDiv = content.rfind ("<div", pos); // 向上寻找 div 的开始
+      size_t nextPos = content.find (
+          colMark, pos + colMark.length ()); // 查找下一个列标记
       if (nextPos == string::npos)
         {
-          nextPos = content.find ("</div>\n", pos);
+          nextPos
+              = content.find ("</div>\n", pos); // 若是最后一列，寻找闭合标签
           if (nextPos == string::npos)
-            nextPos = content.length ();
+            nextPos = content.length (); // 保守方案：截取到文件末尾
         }
       else
         {
-          nextPos = content.rfind ("<div", nextPos);
+          nextPos = content.rfind ("<div", nextPos); // 记录下一列 div 的起始
         }
-      dayHtmls.push_back (content.substr (startDiv, nextPos - startDiv));
-      lastPos = pos + colMark.length ();
+      dayHtmls.push_back (
+          content.substr (startDiv, nextPos - startDiv)); // 截取该天的数据
+      lastPos = pos + colMark.length ();                  // 更新查找起点
       if (dayHtmls.size () == 7)
-        break;
+        break; // 抓够 7 天则强制退出
     }
 
-  vector<Course> courses;
+  vector<Course> courses; // 存储解析出的课程列表
   for (int dayIndex = 0; dayIndex < (int)dayHtmls.size (); ++dayIndex)
     {
-      string dayHtml = dayHtmls[dayIndex];
+      string dayHtml = dayHtmls[dayIndex]; // 获取当天的 HTML
       regex slotRegex (
-          "<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)>");
+          "<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)>"); // 匹配课程格子的
+                                                                     // flex 值
       auto it = sregex_iterator (dayHtml.begin (), dayHtml.end (), slotRegex);
       auto end = sregex_iterator ();
 
       if (it != end)
-        ++it; // Skip column div
+        ++it; // 跳过最外层的列容器 div
 
-      int currentPeriod = 1;
+      int currentPeriod = 1; // 当前节数计数器
       for (; it != end; ++it)
         {
           smatch m = *it;
-          string attributes = m[1];
-          int flex = stoi (m[2]);
+          string attributes = m[1]; // 获取属性字符串
+          int flex = stoi (m[2]);   // 提取 flex 值（代表占用的节数）
           bool isTopLevel = (attributes.find ("class=") == string::npos
                              || attributes.find (
                                     "kbappTimetableDayColumnConflictContainer")
-                                    != string::npos);
+                                    != string::npos); // 判断是否为顶层课程块
           if (!isTopLevel)
-            continue;
+            continue; // 非顶层块则跳过
 
           if (attributes.find ("kbappTimetableDayColumnConflictContainer")
               != string::npos)
             {
+              // ... 处理冲突或多课程情况 ...
               size_t startPos = m.position () + m.length ();
               size_t endPos = dayHtml.length ();
               auto nextIt = it;
@@ -307,15 +312,15 @@ main (int argc, char *argv[])
                              "kbappTimetableDayColumnConflictContainer")
                              != string::npos)
                     {
-                      endPos = (*nextIt).position ();
+                      endPos = (*nextIt).position (); // 确定当前块的结束位置
                       break;
                     }
                 }
-              string innerHtml = dayHtml.substr (startPos, endPos - startPos);
+              string innerHtml = dayHtml.substr (
+                  startPos, endPos - startPos); // 提取内部 HTML
 
-              // 查找该格子内所有的标题，并以标题为起始拆分课程块
-              regex titleRegex (
-                  "class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</div>");
+              regex titleRegex ("class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</"
+                                "div>"); // 匹配课程标题
               auto titleIt = sregex_iterator (innerHtml.begin (),
                                               innerHtml.end (), titleRegex);
               auto titleEnd = sregex_iterator ();
@@ -324,99 +329,94 @@ main (int argc, char *argv[])
                 {
                   smatch tm = *titleIt;
                   Course c;
-                  c.day = dayIndex;
-                  c.startPeriod = currentPeriod;
-                  c.endPeriod = currentPeriod + flex - 1;
-                  c.title = clean (tm[1]);
+                  c.day = dayIndex;                       // 记录星期
+                  c.startPeriod = currentPeriod;          // 记录起始节数
+                  c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
+                  c.title = clean (tm[1]);                // 提取并清理标题
 
-                  // 提取该标题后的相关信息，直到下一个标题出现或块结束
                   size_t blockStart = tm.position () + tm.length ();
                   auto titleNext = titleIt;
                   ++titleNext;
                   size_t blockEnd = (titleNext == titleEnd)
                                         ? innerHtml.length ()
                                         : titleNext->position ();
-                  string itemInfoHtml
-                      = innerHtml.substr (blockStart, blockEnd - blockStart);
+                  string itemInfoHtml = innerHtml.substr (
+                      blockStart, blockEnd - blockStart); // 提取详情块
 
                   regex infoRegex (
                       "class=\"kbappTimetableCourseRenderCourseItemInfoText["
-                      "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>");
+                      "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
                   auto infoIt = sregex_iterator (
                       itemInfoHtml.begin (), itemInfoHtml.end (), infoRegex);
                   bool firstInfo = true;
                   for (; infoIt != sregex_iterator (); ++infoIt)
                     {
-                      string info = clean ((*infoIt)[1]);
+                      string info = clean ((*infoIt)[1]); // 清理信息文字
                       if (info.empty ())
                         continue;
                       if (firstInfo)
                         {
-                          c.weeks = parseWeeks (info);
-                          c.location = formatLocation (info);
+                          c.weeks = parseWeeks (info);        // 解析周数
+                          c.location = formatLocation (info); // 格式化地点
                           firstInfo = false;
                         }
                       else
                         {
                           if (!c.description.empty ())
                             c.description += " ";
-                          c.description += info;
+                          c.description += info; // 拼接其他备注信息
                         }
                     }
                   if (!c.title.empty ())
                     {
-                      courses.push_back (c);
+                      courses.push_back (c); // 加入课程列表
                     }
                 }
             }
-          currentPeriod += flex;
+          currentPeriod += flex; // 更新当前节数
         }
     }
 
   cout << "成功提取 " << courses.size () << " 门课程。" << endl;
-  for (const auto &c : courses)
-    {
-      cout << "[" << c.day << "] " << c.title << " @ " << c.location << " ("
-           << c.startPeriod << "-" << c.endPeriod << "节)" << endl;
-    }
 
   string startSunday;
   if (argc > 1)
     {
-      startSunday = argv[1];
+      startSunday = argv[1]; // 从命令行获取日期
       cout << "使用命令行参数日期: " << startSunday << endl;
     }
   else
     {
       cout << "请输入学期第一周周日的日期 (格式 YYYY-MM-DD): ";
       if (!(cin >> startSunday))
-        startSunday = "2026-03-01";
+        startSunday = "2026-03-01"; // 默认备份日期
     }
 
-  ofstream ics ("schedule.ics");
+  ofstream ics ("schedule.ics"); // 创建输出文件
   ics << "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//NEU Course Table//CN\n";
   int totalEvents = 0;
   for (const auto &c : courses)
     {
       for (int week : c.weeks)
         {
-          string date = addDays (startSunday, c.day + (week - 1) * 7);
-          string startTime = getTime (c.startPeriod, true);
-          string endTime = getTime (c.endPeriod, false);
+          string date
+              = addDays (startSunday, c.day + (week - 1) * 7); // 计算具体日期
+          string startTime = getTime (c.startPeriod, true);    // 获取起始时间
+          string endTime = getTime (c.endPeriod, false);       // 获取结束时间
           ics << "BEGIN:VEVENT\n";
-          ics << "SUMMARY:" << c.title << "\n";
-          ics << "LOCATION:" << c.location << "\n";
-          ics << "DESCRIPTION:" << c.description << "\n";
-          ics << "DTSTART:" << date << "T" << startTime << "\n";
-          ics << "DTEND:" << date << "T" << endTime << "\n";
+          ics << "SUMMARY:" << c.title << "\n";           // 写入标题
+          ics << "LOCATION:" << c.location << "\n";       // 写入地点
+          ics << "DESCRIPTION:" << c.description << "\n"; // 写入详情
+          ics << "DTSTART:" << date << "T" << startTime
+              << "\n";                                       // 写入开始时间
+          ics << "DTEND:" << date << "T" << endTime << "\n"; // 写入结束时间
           ics << "END:VEVENT\n";
-          totalEvents++;
+          totalEvents++; // 计数
         }
     }
   ics << "END:VCALENDAR\n";
-  ics.close ();
-  cout << "已为 " << courses.size () << " 门课生成了 " << totalEvents
-       << " 个独立日程节点，保存在 schedule.ics" << endl;
+  ics.close (); // 关闭文件
+  cout << "生成完成，保存在 schedule.ics" << endl;
 
   return 0;
 }

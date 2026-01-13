@@ -14,7 +14,8 @@ cmake --build .
 ```
 
 #### Linux / macOS
-本项目已支持跨平台。请使用以下命令编译并启动：
+（兼容版用ai生的没有测试不一定好使）
+请使用以下命令编译并启动：
 ```bash
 chmod +x RunApp.sh
 ./RunApp.sh

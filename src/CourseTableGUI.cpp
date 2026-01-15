@@ -10,8 +10,10 @@
 #define UNICODE
 #endif
 
+#include <cstdio>
 #include <iostream>
 #include <string>
+#include <vector>
 #include <windows.h>
 
 // 定义控件ID
@@ -19,6 +21,7 @@
 #define ID_BTN_GENERATE 102
 #define ID_EDIT_DATE 103
 #define ID_BTN_SERVER 104
+#define ID_BTN_COPY_URL 105
 
 LRESULT CALLBACK WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam,
                              LPARAM lParam);
@@ -27,7 +30,96 @@ LRESULT CALLBACK WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam,
 HWND hStatus;
 HWND hDateInput;
 HWND hBtnServer;
+HWND hBtnCopy;
 HANDLE hServerProcess = NULL;
+std::wstring currentUrl = L"";
+
+// 获取本机IP地址的辅助函数 (通过 ipconfig)
+std::wstring
+GetLocalIP ()
+{
+  std::wstring ip = L"127.0.0.1";
+  FILE *pipe = _wpopen (L"ipconfig", L"rt");
+  if (!pipe)
+    return ip;
+  char buffer[512];
+  bool skipCurrentAdapter = false;
+  while (fgets (buffer, sizeof (buffer), pipe))
+    {
+      std::string line (buffer);
+      // 检查是否是适配器标题行 (不以空格开头且结尾带有冒号)
+      if (!line.empty () && line[0] != ' ' && line[0] != '\t'
+          && line.find (":") != std::string::npos)
+        {
+          // 排除常见的虚拟/代理适配器关键字
+          if (line.find ("OpenVPN") != std::string::npos
+              || line.find ("Clash") != std::string::npos
+              || line.find ("v2ray") != std::string::npos
+              || line.find ("Virtual") != std::string::npos
+              || line.find ("TAP") != std::string::npos
+              || line.find ("VPN") != std::string::npos
+              || line.find ("Unknown") != std::string::npos
+              || line.find ("ZeroTier") != std::string::npos)
+            {
+              skipCurrentAdapter = true;
+            }
+          else
+            {
+              skipCurrentAdapter = false;
+            }
+        }
+
+      if (skipCurrentAdapter)
+        continue;
+
+      // 寻找包含 IPv4 的行
+      if (line.find ("IPv4") != std::string::npos)
+        {
+          size_t colon = line.find (":");
+          if (colon != std::string::npos)
+            {
+              std::string res = line.substr (colon + 1);
+              // 去除首尾空格和换行
+              res.erase (0, res.find_first_not_of (" \r\n\t"));
+              res.erase (res.find_last_not_of (" \r\n\t") + 1);
+              // 排除内部回环和 APIPA 地址
+              if (!res.empty () && res.find ("169.254") == std::string::npos
+                  && res != "127.0.0.1")
+                {
+                  int len = MultiByteToWideChar (CP_ACP, 0, res.c_str (), -1,
+                                                 NULL, 0);
+                  wchar_t *wbuf = new wchar_t[len];
+                  MultiByteToWideChar (CP_ACP, 0, res.c_str (), -1, wbuf, len);
+                  ip = wbuf;
+                  delete[] wbuf;
+                  break; // 找到第一个真实的 LAN/Wi-Fi IP
+                }
+            }
+        }
+    }
+  _pclose (pipe);
+  return ip;
+}
+
+// 复制到剪贴板
+void
+CopyToClipboard (HWND hwnd, const std::wstring &text)
+{
+  if (OpenClipboard (hwnd))
+    {
+      EmptyClipboard ();
+      HGLOBAL hGlob
+          = GlobalAlloc (GMEM_MOVEABLE, (text.size () + 1) * sizeof (wchar_t));
+      if (hGlob)
+        {
+          wchar_t *pMem = (wchar_t *)GlobalLock (hGlob);
+          wcscpy (pMem, text.c_str ());
+          GlobalUnlock (hGlob);
+          SetClipboardData (CF_UNICODETEXT, hGlob);
+        }
+      CloseClipboard ();
+    }
+}
 
 int WINAPI
 wWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
@@ -100,8 +192,13 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                       WS_VISIBLE | WS_CHILD, 20, 240, 350, 20, hwnd, NULL,
                       NULL, NULL);
         hBtnServer = CreateWindow (
-            L"BUTTON", L"开启后端共享", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
-            20, 270, 150, 40, hwnd, (HMENU)ID_BTN_SERVER, NULL, NULL);
+            L"BUTTON", L"开启共享", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 20,
+            270, 150, 40, hwnd, (HMENU)ID_BTN_SERVER, NULL, NULL);
+
+        hBtnCopy = CreateWindow (
+            L"BUTTON", L"复制网址",
+            WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | WS_DISABLED, 180, 270, 80,
+            40, hwnd, (HMENU)ID_BTN_COPY_URL, NULL, NULL);
 
         // 状态栏
         hStatus = CreateWindow (L"STATIC", L"等待操作...",
@@ -204,45 +301,88 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 TerminateProcess (hServerProcess, 0);
                 CloseHandle (hServerProcess);
                 hServerProcess = NULL;
+
+                // 额外强制清理，防止残留
+                system ("taskkill /F /IM web_server.exe /T >nul 2>nul");
+
+                currentUrl = L"";
                 SetWindowText (hBtnServer, L"开启后端共享");
+                EnableWindow (hBtnCopy, FALSE);
                 SetWindowText (hStatus, L"后端服务已关闭");
               }
             else
               {
+                // 在启动前，尝试强制关闭可能残留在 8080 端口的进程
+                system ("taskkill /F /IM web_server.exe /T >nul 2>nul");
+
                 wchar_t path[MAX_PATH];
                 GetModuleFileName (NULL, path, MAX_PATH);
                 std::wstring fullPath (path);
                 size_t pos_path = fullPath.find_last_of (L"\\/");
                 std::wstring dir = fullPath.substr (0, pos_path + 1);
 
+                std::wstring serverExe = dir + L"web_server.exe";
+                std::wstring serverPy = dir + L"web_server.py";
                 std::wstring pythonExe = dir + L"venv\\Scripts\\python.exe";
-                DWORD dwAttribVenv = GetFileAttributes (pythonExe.c_str ());
-                bool useVenv = (dwAttribVenv != INVALID_FILE_ATTRIBUTES
-                                && !(dwAttribVenv & FILE_ATTRIBUTE_DIRECTORY));
-                const wchar_t *execPath
-                    = useVenv ? pythonExe.c_str () : L"python.exe";
 
-                // 使用 python -m http.server 8080
-                std::wstring cmd
-                    = std::wstring (execPath) + L" -m http.server 8080";
+                DWORD dwAttribServerExe
+                    = GetFileAttributes (serverExe.c_str ());
+                bool hasServerExe
+                    = (dwAttribServerExe != INVALID_FILE_ATTRIBUTES
+                       && !(dwAttribServerExe & FILE_ATTRIBUTE_DIRECTORY));
+
+                std::wstring cmd;
+                if (hasServerExe)
+                  {
+                    cmd = L"\"" + serverExe + L"\"";
+                  }
+                else
+                  {
+                    DWORD dwAttribVenv
+                        = GetFileAttributes (pythonExe.c_str ());
+                    bool useVenv
+                        = (dwAttribVenv != INVALID_FILE_ATTRIBUTES
+                           && !(dwAttribVenv & FILE_ATTRIBUTE_DIRECTORY));
+                    const wchar_t *execPath
+                        = useVenv ? pythonExe.c_str () : L"python.exe";
+                    cmd = L"\"" + std::wstring (execPath) + L"\" \"" + serverPy
+                          + L"\"";
+                  }
 
                 STARTUPINFO si = { sizeof (si) };
                 PROCESS_INFORMATION pi;
                 if (CreateProcess (NULL, (LPWSTR)cmd.c_str (), NULL, NULL,
-                                   FALSE, CREATE_NO_WINDOW, NULL, dir.c_str (),
-                                   &si, &pi))
+                                   FALSE, CREATE_NEW_CONSOLE, NULL,
+                                   dir.c_str (), &si, &pi))
                   {
                     hServerProcess = pi.hProcess;
                     CloseHandle (pi.hThread);
-                    SetWindowText (hBtnServer, L"关闭后端共享");
-                    SetWindowText (hStatus,
-                                   L"服务已开启！请手机访问：\nhttp://[电脑"
-                                   L"IP]:8080/exp_old.html");
+
+                    SetWindowText (hStatus, L"解析IP地址中，请稍后...");
+
+                    std::wstring ip = GetLocalIP ();
+                    currentUrl = L"http://" + ip
+                                 + L":8080/eams/courseTableForStd.action";
+
+                    SetWindowText (hBtnServer, L"关闭共享");
+                    EnableWindow (hBtnCopy, TRUE);
+                    std::wstring msg
+                        = L"服务已开启！请手机访问：\n" + currentUrl;
+                    SetWindowText (hStatus, msg.c_str ());
                   }
                 else
                   {
                     SetWindowText (hStatus, L"错误：无法启动服务器");
                   }
+              }
+          }
+        else if (LOWORD (wParam) == ID_BTN_COPY_URL) // 复制网址
+          {
+            if (!currentUrl.empty ())
+              {
+                CopyToClipboard (hwnd, currentUrl);
+                MessageBox (hwnd, L"网址已复制到剪贴板！", L"提示",
+                            MB_OK | MB_ICONINFORMATION);
               }
           }
         break;

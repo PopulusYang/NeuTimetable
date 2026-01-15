@@ -1,0 +1,86 @@
+<html>
+<head><meta name=renderer content=webkit>
+<meta http-equiv="content-type" content="text/xml; charset=utf-8"/>
+<title>My97DatePicker</title>
+
+<script>
+var __vpn_hostname_data = "webvpn.neu.edu.cn";
+var __vpn_protocol_data = "https";
+var __vpn_protocol_host = "https://webvpn.neu.edu.cn";
+var __vpn_app_hostname_data = "62304135386136393339346365373340e2b0fd71d8941093ab4e2527";
+var __vpn_app_protocol_data = "http";
+var __vpn_app_port_data = "";
+var __vpn_js_file = "/wengine-vpn/js/main.js?ver=20211207";
+var __vpn_worker_mode = 2;
+var __vpn_host_crypt = true;
+var __vpn_host_crypt_key = "b0A58a69394ce73@";
+var __vpn_host_crypt_iv = "b0A58a69394ce73@";
+</script>
+<script src="/wengine-vpn/js/main.js?ver=20211207" charset="utf-8"></script> <script type="text/javascript" src="config.js?vpn-7"></script>
+<script>vpn_eval((function(){
+
+if(parent==window)
+	location.href = 'http://www.my97.net';
+var $d, $dp, $pdp = parent.$dp, $dt, $tdt, $sdt, $IE=$pdp.ie, $FF = $pdp.ff,$OPERA=$pdp.opera, $ny, $cMark = false;
+if ($pdp.eCont) {
+	$dp = {};
+	for (var p in $pdp) {
+		$dp[p] = $pdp[p];
+	}
+}
+else
+	$dp = $pdp;
+	
+$dp.getLangIndex = function(name){
+	var arr = langList;
+	for (var i = 0; i < arr.length; i++) {
+		if (arr[i].name.toLowerCase() == name) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+$dp.getLang = function(name){
+	var index = $dp.getLangIndex(name);
+	if (index == -1) {
+		index = 0;
+	}
+	return langList[index];
+}
+
+// 以下是添加beangle国际化支持
+if(parent.parent.$BG_LANG) {
+  if(parent.parent.$BG_LANG == 'en' || parent.parent.$BG_LANG == 'en_US') {
+    $dp.lang = 'en';
+  }
+}
+// 以上是添加beangle国际化支持
+
+$dp.realLang = $dp.getLang($dp.lang);
+function normalizeLang(name){
+	name=name.replace('-','_');
+	var index=name.indexOf('_');
+	if(index>0) name = name.substring(0,index) +  name.substring(index).toUpperCase();
+	return name;
+}
+document.write("<script src='../i18n/" + normalizeLang($dp.realLang.name) + "/WdatePicker.js' charset='" + $dp.realLang.charset + "'><\/script>");
+
+for (var i = 0; i < skinList.length; i++) {
+    document.write('<link rel="stylesheet" type="text/css" href="../../themes/' + skinList[i].name + '/datepicker.css" title="' + skinList[i].name + '" charset="' + skinList[i].charset + '" disabled="true"/>');
+}
+
+
+}
+).toString().slice(12, -2),"");</script>
+<script type="text/javascript" src="calendar.js?vpn-7"></script>
+</head>
+<body leftmargin="0" topmargin="0" onload="var vpn_return;eval(vpn_rewrite_js((function () { $c.autoSize() }).toString().slice(14, -2), 2));return vpn_return;" tabindex="0">
+</body>
+</html>
+<script>vpn_eval((function(){
+new My97DP();
+
+}
+).toString().slice(12, -2),"");</script>
+

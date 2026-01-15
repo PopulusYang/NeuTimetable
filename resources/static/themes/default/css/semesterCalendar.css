@@ -1,0 +1,157 @@
+.calendar-text{
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px; 
+	border-radius: 4px;
+	text-align:center;
+	cursor:pointer;	
+	color:#444;
+	font-size:12px;
+}
+.calendar-text-state-default{
+	border:1px solid #AAA;
+}
+
+.calendar-text-state-highlight{
+	-moz-box-shadow:0px 0px 3px #ffd48e; 
+	-webkit-box-shadow:0px 0px 3px #ffd48e; 
+	box-shadow:0px 0px 3px #ffd48e;
+	border:1px solid #ffc260;
+}
+
+.calendar-bar{
+	outer-border:0 none;
+	position:absolute;
+	top:0:
+	left:0;
+	width:370px;
+	z-index:200;
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px;
+	border-radius: 4px;
+	border:1px solid #AAA;
+	text-align:center;
+	margin-top:-1px;
+	display:none;
+	background:#FFF;
+}
+.calendar-bar a{
+	color:#444;
+	float:left;
+	height: 18px;
+	outline:none;
+	text-decoration:none;
+	cursor:pointer;
+}
+.calendar-bar a:visited {
+	color:#444;
+	outline:none;
+	text-decoration:none;
+}
+.calendar-bar a:hover{
+	outline:none;
+	color:red;
+}
+
+.calendar-bar a.allSemester{
+	font-size:14px;
+	line-height:18px;
+	height:18px;
+	text-decoration:none;
+	cursor:pointer;
+}	
+.calendar-bar a img{
+	border:none;
+	width:14px;
+	height:18px;
+}
+.calendar-bar span{
+	line-height:19px;
+	font-size:12px;
+	float:left;
+}
+
+.semesterCalendar_yearTb{
+	-moz-border-radius: 4px 0 0 4px;
+	-webkit-border-radius: 4px 0 0 4px;
+	border-radius: 4px 0 0 4px;
+	width:80%;
+}
+
+.semesterCalendar_termTb{
+	-moz-border-radius: 0 4px 4px 0;
+	-webkit-border-radius: 0 4px 4px 0;
+	border-radius: 0 4px 4px 0;
+	width:20%;
+}
+
+.calendar-bar table{
+	text-align:center;
+	background:#FFF;
+	float:left;
+}
+.calendar-bar table#termTb{
+	display:none;
+}
+.calendar-bar-input{
+	float:left;
+	border:none;
+	color:#444;
+	font-size:12px;
+	height:18px;
+	width:100px;
+	padding:0;
+	text-align:center;
+	cursor:pointer;
+	background:#FFF;
+}
+.calendar-input-hover{
+	float:left;
+	border:none;
+	color:#444;
+	font-size:12px;
+	height:18px;
+	text-align:center;
+	cursor:pointer;
+	background:#E3FFFE;
+}
+
+.calendar-bar table tr td{
+	font-size:13px;
+	-moz-border-radius: 4px;
+	-webkit-border-radius: 4px;
+	border-radius: 4px;
+}
+.calendar-bar .allSemester{
+	-moz-border-radius: 4px 4px 0 0;
+	-webkit-border-radius: 4px 4px 0 0;
+	border-radius: 4px 4px 0 0;
+}
+.calendar-bar-td-blankBorder{
+		border:1px solid #FFF;
+}
+.calendar-bar .ui-state-active {
+	color:red;
+	font-weight:bold;
+	background:url("https://webvpn.neu.edu.cn/http/62304135386136393339346365373340e2b0fd71d8941093ab4e2527/eams/static/images/semesterCalendarActiveBG.png") repeat-x scroll 50% 50% #DADADA;
+	border: 1px solid #AAA;
+	cursor:pointer;
+}
+
+.calendar-bar #semesterCalendar_yearTb tr td{
+	width:33.33%;
+}
+
+.calendar-bar #semesterCalendar_termTb tr td{
+	width:100%;
+}
+
+.calendar-bar table tr td span{
+	float:none;
+}
+.calendar-bar .calendar-td-hover{
+	cursor:pointer;
+	font-weight:bold;
+	background:#bcd8ff;
+	border: 1px solid #1364fc;
+    color: #04438a;
+}

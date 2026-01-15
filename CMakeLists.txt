@@ -39,6 +39,12 @@ if(WIN32)
             "${CMAKE_SOURCE_DIR}/src/neuscraper_ui.py"
             "${CMAKE_BINARY_DIR}/bin/neuscraper_ui.py"
         COMMAND ${CMAKE_COMMAND} -E copy
+            "${CMAKE_SOURCE_DIR}/src/web_server.py"
+            "${CMAKE_BINARY_DIR}/bin/web_server.py"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/resources/static"
+            "${CMAKE_BINARY_DIR}/bin/eams/static"
+        COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/RunApp.bat"
             "${CMAKE_BINARY_DIR}/bin/RunApp.bat"
         COMMAND ${CMAKE_COMMAND} -E copy

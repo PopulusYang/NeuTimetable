@@ -20,5 +20,13 @@ if not exist "%VENV_DIR%" (
 )
 
 echo [Setup] Starting application...
-start "" "%SCRIPT_DIR%CourseTableApp.exe"
+if exist "%SCRIPT_DIR%dist_final\CourseTableApp.exe" (
+    start "" /D "%SCRIPT_DIR%dist_final" "CourseTableApp.exe"
+) else if exist "%SCRIPT_DIR%build\bin\CourseTableApp.exe" (
+    start "" /D "%SCRIPT_DIR%build\bin" "CourseTableApp.exe"
+) else (
+    echo [Error] CourseTableApp.exe not found! 
+    echo Please run build_dist.bat first or compile the project using CMake.
+    pause
+)
 exit /b 0

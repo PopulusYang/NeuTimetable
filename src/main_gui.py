@@ -8,12 +8,15 @@ from tkinter import messagebox
 import subprocess
 import os
 import sys
+import threading
+import socket
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 class App:
     def __init__(self, root):
         self.root = root # 保存根窗口引用
         self.root.title("东大课表导出工具 (Cross-Platform)") # 设置窗口标题
-        self.root.geometry("400x320") # 设置窗口初始大小
+        self.root.geometry("400x420") # 设置窗口初始大小
         self.root.resizable(False, False) # 禁止缩放窗口
 
         self.bg_color = "#f0f0f0" # 定义背景颜色
@@ -34,10 +37,56 @@ class App:
         self.btn_gen = tk.Button(root, text="生成日历文件 (.ics)", command=self.generate_ics, height=2, width=20, bg="#28a745", fg="white") # 生成按钮
         self.btn_gen.pack(pady=10) # 放置生成按钮
 
+        # 第三步：后端共享
+        tk.Label(root, text="第三步 (可选)：开启手机访问 (Port 8080)", bg=self.bg_color).pack(pady=(10, 2))
+        self.btn_server = tk.Button(root, text="开启后端共享", command=self.toggle_server, height=2, width=20, bg="#6c757d", fg="white")
+        self.btn_server.pack()
+        self.server_thread = None
+        self.httpd = None
 
         self.status_var = tk.StringVar(value="等待操作...") # 状态变量
         self.status_label = tk.Label(root, textvariable=self.status_var, fg="blue", bg=self.bg_color) # 状态显示标签
         self.status_label.pack(pady=10) # 放置状态标签
+
+    def get_local_ip(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "127.0.0.1"
+
+    def toggle_server(self):
+        if self.httpd:
+            self.httpd.shutdown()
+            self.httpd = None
+            self.btn_server.config(text="开启后端共享", bg="#6c757d")
+            self.status_var.set("后端已关闭")
+            return
+
+        def run_server():
+            nonlocal self
+            try:
+                # 切换到程序根目录，确保能访问到 exp_old.html
+                proj_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                os.chdir(proj_root)
+                
+                server_address = ('', 8080)
+                self.httpd = HTTPServer(server_address, SimpleHTTPRequestHandler)
+                ip = self.get_local_ip()
+                url = f"http://{ip}:8080/exp_old.html"
+                self.root.after(0, lambda: self.status_var.set(f"已开启！共享地址: {url}"))
+                self.root.after(0, lambda: self.btn_server.config(text="关闭后端共享", bg="#dc3545"))
+                print(f"Server started at {url}")
+                self.httpd.serve_forever()
+            except Exception as e:
+                self.root.after(0, lambda: self.status_var.set(f"服务启动失败: {e}"))
+                self.httpd = None
+
+        self.server_thread = threading.Thread(target=run_server, daemon=True)
+        self.server_thread.start()
 
     def get_bin_path(self, name):
 

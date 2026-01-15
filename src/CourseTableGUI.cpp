@@ -18,6 +18,7 @@
 #define ID_BTN_SCRAPE 101
 #define ID_BTN_GENERATE 102
 #define ID_EDIT_DATE 103
+#define ID_BTN_SERVER 104
 
 LRESULT CALLBACK WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam,
                              LPARAM lParam);
@@ -25,6 +26,8 @@ LRESULT CALLBACK WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam,
 // 状态文本
 HWND hStatus;
 HWND hDateInput;
+HWND hBtnServer;
+HANDLE hServerProcess = NULL;
 
 int WINAPI
 wWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
@@ -45,7 +48,7 @@ wWinMain (HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine,
       0, CLASS_NAME, L"东大课表导出工具", // 窗口标题
       WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX,
       CW_USEDEFAULT, // 固定窗口大小样式
-      CW_USEDEFAULT, 400, 300, NULL, NULL, hInstance, NULL); // 创建主窗口
+      CW_USEDEFAULT, 400, 420, NULL, NULL, hInstance, NULL); // 创建主窗口
 
   if (hwnd == NULL)
     return 0; // 创建失败则退出
@@ -92,9 +95,17 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                       WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 20, 180, 150, 40,
                       hwnd, (HMENU)ID_BTN_GENERATE, NULL, NULL); // 生成按钮
 
+        // 第三步：服务器
+        CreateWindow (L"STATIC", L"第三步 (可选)：开启手机访问 (Port 8080)",
+                      WS_VISIBLE | WS_CHILD, 20, 240, 350, 20, hwnd, NULL,
+                      NULL, NULL);
+        hBtnServer = CreateWindow (
+            L"BUTTON", L"开启后端共享", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+            20, 270, 150, 40, hwnd, (HMENU)ID_BTN_SERVER, NULL, NULL);
+
         // 状态栏
         hStatus = CreateWindow (L"STATIC", L"等待操作...",
-                                WS_VISIBLE | WS_CHILD, 20, 230, 350, 20, hwnd,
+                                WS_VISIBLE | WS_CHILD, 20, 330, 350, 40, hwnd,
                                 NULL, NULL, NULL); // 底部状态栏
         break;
       }
@@ -177,7 +188,8 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 CloseHandle (pi.hThread);                    // 关闭线程句柄
                 SetWindowText (hStatus, L"成功！生成了 schedule.ics");
                 MessageBox (
-                    hwnd, L"日历文件生成成功！你可以将其导入 Google 日历了。",
+                    hwnd,
+                    L"日历文件生成成功！\n旧版 HTML 预览也在同目录下生成了。",
                     L"完成", MB_OK | MB_ICONINFORMATION); // 提示完成
               }
             else
@@ -185,9 +197,62 @@ WindowProc (HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 SetWindowText (hStatus, L"错误：无法运行 NeuCourseTabel.exe");
               }
           }
+        else if (LOWORD (wParam) == ID_BTN_SERVER) // 开启服务器
+          {
+            if (hServerProcess != NULL)
+              {
+                TerminateProcess (hServerProcess, 0);
+                CloseHandle (hServerProcess);
+                hServerProcess = NULL;
+                SetWindowText (hBtnServer, L"开启后端共享");
+                SetWindowText (hStatus, L"后端服务已关闭");
+              }
+            else
+              {
+                wchar_t path[MAX_PATH];
+                GetModuleFileName (NULL, path, MAX_PATH);
+                std::wstring fullPath (path);
+                size_t pos_path = fullPath.find_last_of (L"\\/");
+                std::wstring dir = fullPath.substr (0, pos_path + 1);
+
+                std::wstring pythonExe = dir + L"venv\\Scripts\\python.exe";
+                DWORD dwAttribVenv = GetFileAttributes (pythonExe.c_str ());
+                bool useVenv = (dwAttribVenv != INVALID_FILE_ATTRIBUTES
+                                && !(dwAttribVenv & FILE_ATTRIBUTE_DIRECTORY));
+                const wchar_t *execPath
+                    = useVenv ? pythonExe.c_str () : L"python.exe";
+
+                // 使用 python -m http.server 8080
+                std::wstring cmd
+                    = std::wstring (execPath) + L" -m http.server 8080";
+
+                STARTUPINFO si = { sizeof (si) };
+                PROCESS_INFORMATION pi;
+                if (CreateProcess (NULL, (LPWSTR)cmd.c_str (), NULL, NULL,
+                                   FALSE, CREATE_NO_WINDOW, NULL, dir.c_str (),
+                                   &si, &pi))
+                  {
+                    hServerProcess = pi.hProcess;
+                    CloseHandle (pi.hThread);
+                    SetWindowText (hBtnServer, L"关闭后端共享");
+                    SetWindowText (hStatus,
+                                   L"服务已开启！请手机访问：\nhttp://[电脑"
+                                   L"IP]:8080/exp_old.html");
+                  }
+                else
+                  {
+                    SetWindowText (hStatus, L"错误：无法启动服务器");
+                  }
+              }
+          }
         break;
       }
-    case WM_DESTROY:       // 窗口销毁
+    case WM_DESTROY: // 窗口销毁
+      if (hServerProcess != NULL)
+        {
+          TerminateProcess (hServerProcess, 0);
+          CloseHandle (hServerProcess);
+        }
       PostQuitMessage (0); // 发送退出消息
       return 0;
     }

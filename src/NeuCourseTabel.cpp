@@ -55,6 +55,7 @@ struct Course
   string title;
   string location;
   string description;
+  string weekStr; // 新增：原始周数信息
   int day;
   int startPeriod;
   int endPeriod;
@@ -275,9 +276,9 @@ main (int argc, char *argv[])
   for (int dayIndex = 0; dayIndex < (int)dayHtmls.size (); ++dayIndex)
     {
       string dayHtml = dayHtmls[dayIndex]; // 获取当天的 HTML
-      regex slotRegex (
-          "<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)>"); // 匹配课程格子的
-                                                                     // flex 值
+      regex slotRegex ("<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)"
+                       ">"); // 匹配课程格子的
+                             // flex 值
       auto it = sregex_iterator (dayHtml.begin (), dayHtml.end (), slotRegex);
       auto end = sregex_iterator ();
 
@@ -290,87 +291,126 @@ main (int argc, char *argv[])
           smatch m = *it;
           string attributes = m[1]; // 获取属性字符串
           int flex = stoi (m[2]);   // 提取 flex 值（代表占用的节数）
-          bool isTopLevel = (attributes.find ("class=") == string::npos
-                             || attributes.find (
-                                    "kbappTimetableDayColumnConflictContainer")
-                                    != string::npos); // 判断是否为顶层课程块
+          bool isTopLevel
+              = (attributes.find ("class=") == string::npos
+                 || attributes.find ("kbappTimetableDayColumn")
+                        != string::
+                            npos); // 判断是否为顶层课程块（包含冲突容器和普通课程块）
           if (!isTopLevel)
             continue; // 非顶层块则跳过
 
-          if (attributes.find ("kbappTimetableDayColumnConflictContainer")
-              != string::npos)
+          // 提取当前块内部的 HTML 内容
+          size_t startPos = m.position () + m.length ();
+          size_t endPos = dayHtml.length ();
+          auto nextIt = it;
+          for (++nextIt; nextIt != end; ++nextIt)
             {
-              // ... 处理冲突或多课程情况 ...
-              size_t startPos = m.position () + m.length ();
-              size_t endPos = dayHtml.length ();
-              auto nextIt = it;
-              for (++nextIt; nextIt != end; ++nextIt)
+              string nextAttr = (*nextIt)[1];
+              if (nextAttr.find ("class=") == string::npos
+                  || nextAttr.find ("kbappTimetableDayColumn") != string::npos)
                 {
-                  string nextAttr = (*nextIt)[1];
-                  if (nextAttr.find ("class=") == string::npos
-                      || nextAttr.find (
-                             "kbappTimetableDayColumnConflictContainer")
-                             != string::npos)
-                    {
-                      endPos = (*nextIt).position (); // 确定当前块的结束位置
-                      break;
-                    }
+                  endPos = (*nextIt).position (); // 确定当前块的结束位置
+                  break;
                 }
-              string innerHtml = dayHtml.substr (
-                  startPos, endPos - startPos); // 提取内部 HTML
+            }
+          string innerHtml = dayHtml.substr (startPos, endPos - startPos);
 
-              regex titleRegex ("class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</"
-                                "div>"); // 匹配课程标题
-              auto titleIt = sregex_iterator (innerHtml.begin (),
-                                              innerHtml.end (), titleRegex);
-              auto titleEnd = sregex_iterator ();
+          regex titleRegex ("class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</"
+                            "div>"); // 匹配课程标题
+          auto titleIt = sregex_iterator (innerHtml.begin (), innerHtml.end (),
+                                          titleRegex);
+          auto titleEnd = sregex_iterator ();
 
-              for (; titleIt != titleEnd; ++titleIt)
+          for (; titleIt != titleEnd; ++titleIt)
+            {
+              smatch tm = *titleIt;
+              Course c;
+              c.day = dayIndex;                       // 记录星期
+              c.startPeriod = currentPeriod;          // 记录起始节数
+              c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
+              c.title = clean (tm[1]);                // 提取并清理标题
+
+              // 过滤掉非课程的页面干扰项
+              if (c.title == "我的应用" || c.title == "公告消息情况"
+                  || c.title == "学习日程"
+                  || c.title.find ("2026-") != string::npos)
+                continue;
+
+              size_t blockStart = tm.position () + tm.length ();
+              auto titleNext = titleIt;
+              ++titleNext;
+              size_t blockEnd = (titleNext == titleEnd)
+                                    ? innerHtml.length ()
+                                    : titleNext->position ();
+              string itemInfoHtml
+                  = innerHtml.substr (blockStart, blockEnd - blockStart);
+
+              regex infoRegex (
+                  "class=\"kbappTimetableCourseRenderCourseItemInfoText["
+                  "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
+              auto infoIt = sregex_iterator (itemInfoHtml.begin (),
+                                             itemInfoHtml.end (), infoRegex);
+              bool firstInfo = true;
+              for (; infoIt != sregex_iterator (); ++infoIt)
                 {
-                  smatch tm = *titleIt;
-                  Course c;
-                  c.day = dayIndex;                       // 记录星期
-                  c.startPeriod = currentPeriod;          // 记录起始节数
-                  c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
-                  c.title = clean (tm[1]);                // 提取并清理标题
-
-                  size_t blockStart = tm.position () + tm.length ();
-                  auto titleNext = titleIt;
-                  ++titleNext;
-                  size_t blockEnd = (titleNext == titleEnd)
-                                        ? innerHtml.length ()
-                                        : titleNext->position ();
-                  string itemInfoHtml = innerHtml.substr (
-                      blockStart, blockEnd - blockStart); // 提取详情块
-
-                  regex infoRegex (
-                      "class=\"kbappTimetableCourseRenderCourseItemInfoText["
-                      "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
-                  auto infoIt = sregex_iterator (
-                      itemInfoHtml.begin (), itemInfoHtml.end (), infoRegex);
-                  bool firstInfo = true;
-                  for (; infoIt != sregex_iterator (); ++infoIt)
+                  string info = clean ((*infoIt)[1]); // 清理信息文字
+                  if (info.empty ())
+                    continue;
+                  if (firstInfo)
                     {
-                      string info = clean ((*infoIt)[1]); // 清理信息文字
-                      if (info.empty ())
-                        continue;
-                      if (firstInfo)
-                        {
-                          c.weeks = parseWeeks (info);        // 解析周数
-                          c.location = formatLocation (info); // 格式化地点
-                          firstInfo = false;
-                        }
+                      // 1. 提取周数部分
+                      regex weekRegex ("([0-9\\-,]+周(\\((单|双)\\))?)");
+                      smatch wmatch;
+                      if (regex_search (info, wmatch, weekRegex))
+                        c.weekStr = wmatch.str ();
                       else
+                        c.weekStr = "";
+
+                      c.weeks = parseWeeks (info);        // 解析周数数组
+                      c.location = formatLocation (info); // 提取地点
+
+                      // 2. 提取教师姓名
+                      // (从第一行中剔除周数和地点关键字后的部分)
+                      string teacher = info;
+                      if (!c.weekStr.empty ())
+                        {
+                          size_t wpos = teacher.find (c.weekStr);
+                          if (wpos != string::npos)
+                            teacher.erase (wpos, c.weekStr.length ());
+                        }
+                      size_t locKeyPos = teacher.find ("浑南校区");
+                      if (locKeyPos == string::npos)
+                        locKeyPos = teacher.find ("南湖校区");
+                      if (locKeyPos != string::npos)
+                        {
+                          teacher.erase (locKeyPos);
+                        }
+                      else if (!c.location.empty ())
+                        {
+                          size_t lpos = teacher.find (c.location);
+                          if (lpos != string::npos)
+                            teacher.erase (lpos, c.location.length ());
+                        }
+                      teacher = clean (teacher);
+                      if (!teacher.empty ())
                         {
                           if (!c.description.empty ())
-                            c.description += " ";
-                          c.description += info; // 拼接其他备注信息
+                            c.description += ",";
+                          c.description += teacher;
                         }
+
+                      firstInfo = false;
                     }
-                  if (!c.title.empty ())
+                  else
                     {
-                      courses.push_back (c); // 加入课程列表
+                      if (!c.description.empty ())
+                        c.description += ",";
+                      c.description += info; // 拼接其他信息（通常是教师）
                     }
+                }
+              if (!c.title.empty ())
+                {
+                  courses.push_back (c); // 加入课程列表
                 }
             }
           currentPeriod += flex; // 更新当前节数
@@ -417,6 +457,100 @@ main (int argc, char *argv[])
   ics << "END:VCALENDAR\n";
   ics.close (); // 关闭文件
   cout << "生成完成，保存在 schedule.ics" << endl;
+
+  // 生成旧版样式的 HTML 课表
+  ofstream html ("exp_old.html");
+  html << "<!DOCTYPE html><html><head><meta charset='utf-8'><title>我的课表 "
+          "(旧系统样式)</title>"
+       << "<style>"
+       << "body { font-family: 'Microsoft YaHei', sans-serif; "
+          "background-color: #f5f5f5; }"
+       << "table { border-collapse: collapse; width: 100%; border: 1px solid "
+          "#000; background: white; table-layout: fixed; }"
+       << "th, td { border: 1px solid #000; text-align: center; padding: 4px; "
+          "overflow: hidden; }"
+       << "th { background-color: #DEEDF7; font-size: 13px; height: 30px; }"
+       << ".infoTitle { background-color: #94aef3; font-size: 11px; "
+          "transition: background 0.3s; }"
+       << ".infoTitle:hover { background-color: #7a9ce0; }"
+       << ".period-label { background-color: #EEFF00; font-weight: bold; "
+          "width: 60px; font-size: 12px; }"
+       << ".course-box { text-align: left; padding: 2px; }"
+       << "hr { border: 0; border-top: 1px dashed #555; margin: 4px 0; }"
+       << "</style></head><body>"
+       << "<div style='text-align:center; margin: 10px; font-size: "
+          "14px;'><b>东北大学 课程表 (旧系统样式预览)</b><br>"
+       << "<span style='font-size: 12px;'>格式说明：课程名称 (教师) / (周数, "
+          "教室)</span></div>"
+       << "<table><thead><tr><th "
+          "style='width:60px;'>节次/周次</th><th>星期日</th><th>星期一</"
+          "th><th>星期二</th><th>星期三</th><th>星期四</th><th>星期五</"
+          "th><th>星期六</th></tr></thead><tbody>";
+
+  vector<Course *> cgrid[13][7];
+  for (auto &c : courses)
+    {
+      if (c.day >= 0 && c.day < 7 && c.startPeriod >= 1 && c.startPeriod <= 12)
+        cgrid[c.startPeriod][c.day].push_back (&c);
+    }
+
+  bool occupied[13][7] = { false };
+  const char *periodNames[]
+      = { "",       "第一节",   "第二节",  "第三节", "第四节",
+          "第五节", "第六节",   "第七节",  "第八节", "第九节",
+          "第十节", "第十一节", "第十二节" };
+
+  for (int p = 1; p <= 12; ++p)
+    {
+      html << "<tr>";
+      html << "<td class='period-label'>" << periodNames[p] << "</td>";
+
+      for (int d = 0; d < 7; ++d)
+        {
+          if (occupied[p][d])
+            continue;
+
+          if (cgrid[p][d].empty ())
+            {
+              html << "<td></td>";
+              continue;
+            }
+
+          int maxEnd = p;
+          for (auto *cptr : cgrid[p][d])
+            {
+              if (cptr->endPeriod > maxEnd)
+                maxEnd = cptr->endPeriod;
+            }
+          if (maxEnd > 12)
+            maxEnd = 12;
+
+          int rowspan = maxEnd - p + 1;
+          html << "<td class='infoTitle' rowspan='" << rowspan << "'>";
+          html << "<div class='course-box'>";
+
+          for (size_t i = 0; i < cgrid[p][d].size (); ++i)
+            {
+              Course *cptr = cgrid[p][d][i];
+              html << "<b>" << cptr->title << "</b> (" << cptr->description
+                   << ")";
+              html << "<br>(" << cptr->weekStr << ", " << cptr->location
+                   << ")";
+              if (i < cgrid[p][d].size () - 1)
+                html << "<hr>";
+            }
+
+          html << "</div></td>";
+
+          for (int r = p; r <= maxEnd; ++r)
+            occupied[r][d] = true;
+        }
+      html << "</tr>";
+    }
+
+  html << "</tbody></table></body></html>";
+  html.close ();
+  cout << "旧版 HTML 预览已完成格式优化: exp_old.html" << endl;
 
   return 0;
 }

@@ -16,6 +16,7 @@ __pycache__/
 
 # PyInstaller
 /dist/
+/dist_final/
 
 # IDEs
 .vscode/

@@ -7,11 +7,15 @@
 #### Windows
 请确保已安装 CMake 和 C++ 编译器 (如 MinGW-w64)，运行：
 ```bash
+cd build                                                                                                      
+cmake .. -G "MinGW Makefiles"
+cmake --build .
 ./build_dist.bat
 ```
 
 #### Linux / macOS
-本项目已支持跨平台。请使用以下命令编译并启动：
+（兼容版用ai生的没有测试不一定好使）
+请使用以下命令编译并启动：
 ```bash
 chmod +x RunApp.sh
 ./RunApp.sh

@@ -18,570 +18,679 @@
 
 using namespace std;
 
-string
-trim (string s)
+// =============== 日志系统开始 ===============
+enum class LogLevel
 {
-  size_t first = s.find_first_not_of (" \n\r\t");
-  if (string::npos == first)
-    return "";
-  size_t last = s.find_last_not_of (" \n\r\t");
-  return s.substr (first, (last - first + 1));
+    DEBUG,
+    INFO,
+    WARNING,
+    ERROR
+};
+
+typedef void (*LogCallback)(int level, const char *msg);
+static LogCallback globalLogCallback = nullptr;
+
+extern "C"
+{
+#ifdef _WIN32
+    __declspec(dllexport)
+#endif
+    void set_log_callback(LogCallback cb)
+    {
+        globalLogCallback = cb;
+    }
+}
+
+// 全局日志级别控制（可调整），默认为 INFO
+LogLevel currentLogLevel = LogLevel::DEBUG;
+
+class Logger
+{
+public:
+    Logger(LogLevel level, const char *file, int line) : level(level), file(file), line(line) {}
+    ~Logger()
+    {
+        if (level >= currentLogLevel)
+        {
+            std::ostream &os = (level == LogLevel::ERROR) ? std::cerr : std::cout;
+
+            // 终端高亮颜色控制 (基于 ANSI 转义码)
+            const char *colorPrefix = "";
+            const char *colorSuffix = "\033[0m";
+            std::string levelStr;
+            switch (level)
+            {
+            case LogLevel::DEBUG:
+                levelStr = "[DEBUG]";
+                colorPrefix = "\033[36m";
+                break; // 青色
+            case LogLevel::INFO:
+                levelStr = "[INFO] ";
+                colorPrefix = "\033[32m";
+                break; // 绿色
+            case LogLevel::WARNING:
+                levelStr = "[WARN] ";
+                colorPrefix = "\033[33m";
+                break; // 黄色
+            case LogLevel::ERROR:
+                levelStr = "[ERROR]";
+                colorPrefix = "\033[31m";
+                break; // 红色
+            }
+
+            // 提取文件名而不是全路径
+            std::string filename(file);
+            size_t pos = filename.find_last_of("/\\");
+            if (pos != std::string::npos)
+                filename = filename.substr(pos + 1);
+
+            std::string final_msg = os_.str();
+
+            // Invoke the callback if present
+            if (globalLogCallback)
+            {
+                int levelInt = static_cast<int>(level);
+                std::ostringstream cb_msg;
+                cb_msg << levelStr << " [" << filename << ":" << line << "] " << final_msg;
+                globalLogCallback(levelInt, cb_msg.str().c_str());
+            }
+
+            os << colorPrefix << levelStr << " [" << filename << ":" << line << "] "
+               << final_msg << colorSuffix << std::endl;
+        }
+    }
+
+    template <typename T>
+    Logger &operator<<(const T &msg)
+    {
+        if (level >= currentLogLevel)
+        {
+            os_ << msg;
+        }
+        return *this;
+    }
+
+private:
+    LogLevel level;
+    const char *file;
+    int line;
+    std::ostringstream os_;
+};
+
+#define LOG_DEBUG Logger(LogLevel::DEBUG, __FILE__, __LINE__)
+#define LOG_INFO Logger(LogLevel::INFO, __FILE__, __LINE__)
+#define LOG_WARN Logger(LogLevel::WARNING, __FILE__, __LINE__)
+#define LOG_ERROR Logger(LogLevel::ERROR, __FILE__, __LINE__)
+// =============== 日志系统结束 ===============
+
+string
+trim(string s)
+{
+    size_t first = s.find_first_not_of(" \n\r\t");
+    if (string::npos == first)
+        return "";
+    size_t last = s.find_last_not_of(" \n\r\t");
+    return s.substr(first, (last - first + 1));
 }
 
 string
-clean (string s)
+clean(string s)
 {
-  string t = trim (s);
-  string res;
-  bool lastSpace = false;
-  for (char c : t)
+    string t = trim(s);
+    string res;
+    bool lastSpace = false;
+    for (char c : t)
     {
-      if (isspace (c))
+        if (isspace(c))
         {
-          if (!lastSpace)
-            res += ' ';
-          lastSpace = true;
+            if (!lastSpace)
+                res += ' ';
+            lastSpace = true;
         }
-      else
+        else
         {
-          res += c;
-          lastSpace = false;
+            res += c;
+            lastSpace = false;
         }
     }
-  return res;
+    return res;
 }
 
 // 辅助函数：转义 CSV 中的特殊字符
 string
-csvQuote (string s)
+csvQuote(string s)
 {
-  string res = "\"";
-  for (char c : s)
+    string res = "\"";
+    for (char c : s)
     {
-      if (c == '"')
-        res += "\"\"";
-      else
-        res += c;
+        if (c == '"')
+            res += "\"\"";
+        else
+            res += c;
     }
-  res += "\"";
-  return res;
+    res += "\"";
+    return res;
 }
 
 // 辅助函数：转义 HTML 属性中的双引号
 string
-escapeHtml (string s)
+escapeHtml(string s)
 {
-  string res;
-  for (char c : s)
+    string res;
+    for (char c : s)
     {
-      if (c == '\"')
-        res += "&quot;";
-      else if (c == '\'')
-        res += "&#39;";
-      else if (c == '<')
-        res += "&lt;";
-      else if (c == '>')
-        res += "&gt;";
-      else if (c == '&')
-        res += "&amp;";
-      else
-        res += c;
+        if (c == '\"')
+            res += "&quot;";
+        else if (c == '\'')
+            res += "&#39;";
+        else if (c == '<')
+            res += "&lt;";
+        else if (c == '>')
+            res += "&gt;";
+        else if (c == '&')
+            res += "&amp;";
+        else
+            res += c;
     }
-  return res;
+    return res;
 }
 
 struct Course
 {
-  string title;
-  string location;
-  string description;
-  string weekStr; // 新增：原始周数信息
-  int day;
-  int startPeriod;
-  int endPeriod;
-  vector<int> weeks;
+    string title;
+    string location;
+    string description;
+    string weekStr; // 新增：原始周数信息
+    int day;
+    int startPeriod;
+    int endPeriod;
+    vector<int> weeks;
 };
 
 // 解析周数逻辑：处理 1-12周, 9周, 11-13周(单/双) 等
 vector<int>
-parseWeeks (string s)
+parseWeeks(string s)
 {
-  vector<int> weeks;
-  regex weekPartRegex ("([0-9\\-,]+)周(\\((单|双)\\))?");
-  auto words_begin = sregex_iterator (s.begin (), s.end (), weekPartRegex);
-  auto words_end = sregex_iterator ();
+    vector<int> weeks;
+    regex weekPartRegex("([0-9\\-,]+)周(\\((单|双)\\))?");
+    auto words_begin = sregex_iterator(s.begin(), s.end(), weekPartRegex);
+    auto words_end = sregex_iterator();
 
-  for (sregex_iterator i = words_begin; i != words_end; ++i)
+    for (sregex_iterator i = words_begin; i != words_end; ++i)
     {
-      smatch match = *i;
-      string rangeStr = match[1].str ();
-      string type = match[3].str (); // "单" 或 "双" 或 ""
+        smatch match = *i;
+        string rangeStr = match[1].str();
+        string type = match[3].str(); // "单" 或 "双" 或 ""
 
-      stringstream ss (rangeStr);
-      string segment;
-      while (getline (ss, segment, ','))
+        stringstream ss(rangeStr);
+        string segment;
+        while (getline(ss, segment, ','))
         {
-          segment = trim (segment);
-          if (segment.empty ())
-            continue;
-          size_t dash = segment.find ('-');
-          int start = 0, end = 0;
-          try
+            segment = trim(segment);
+            if (segment.empty())
+                continue;
+            size_t dash = segment.find('-');
+            int start = 0, end = 0;
+            try
             {
-              if (dash != string::npos)
+                if (dash != string::npos)
                 {
-                  string s1 = segment.substr (0, dash);
-                  string s2 = segment.substr (dash + 1);
-                  if (s1.empty () || s2.empty ())
-                    continue;
-                  start = stoi (s1);
-                  end = stoi (s2);
+                    string s1 = segment.substr(0, dash);
+                    string s2 = segment.substr(dash + 1);
+                    if (s1.empty() || s2.empty())
+                        continue;
+                    start = stoi(s1);
+                    end = stoi(s2);
                 }
-              else
+                else
                 {
-                  start = end = stoi (segment);
+                    start = end = stoi(segment);
                 }
             }
-          catch (...)
+            catch (...)
             {
-              continue;
+                continue;
             }
 
-          for (int w = start; w <= end; ++w)
+            for (int w = start; w <= end; ++w)
             {
-              if (type == "单" && w % 2 == 0)
-                continue;
-              if (type == "双" && w % 2 != 0)
-                continue;
-              weeks.push_back (w);
+                if (type == "单" && w % 2 == 0)
+                    continue;
+                if (type == "双" && w % 2 != 0)
+                    continue;
+                weeks.push_back(w);
             }
         }
     }
-  if (weeks.empty ())
-    for (int i = 1; i <= 16; ++i)
-      weeks.push_back (i);
-  return weeks;
+    if (weeks.empty())
+        for (int i = 1; i <= 16; ++i)
+            weeks.push_back(i);
+    return weeks;
 }
 
 // 位置
 string
-formatLocation (string s)
+formatLocation(string s)
 {
-  size_t pos = s.find ("浑南校区");
-  if (pos == string::npos)
-    pos = s.find ("南湖校区");
-  if (pos != string::npos)
+    size_t pos = s.find("浑南校区");
+    if (pos == string::npos)
+        pos = s.find("南湖校区");
+    if (pos != string::npos)
     {
-      return trim (s.substr (pos));
+        return trim(s.substr(pos));
     }
-  return trim (s);
+    return trim(s);
 }
 
 string
-addDays (string startDate, int days)
+addDays(string startDate, int days)
 {
-  struct tm tm = {};
-  int y, m, d;
-  char sep;
-  stringstream ss (startDate);
-  if (!(ss >> y >> sep >> m >> sep >> d))
-    return "19700101";
-  tm.tm_year = y - 1900;
-  tm.tm_mon = m - 1;
-  tm.tm_mday = d;
-  tm.tm_isdst = -1;
+    struct tm tm = {};
+    int y, m, d;
+    char sep;
+    stringstream ss(startDate);
+    if (!(ss >> y >> sep >> m >> sep >> d))
+        return "19700101";
+    tm.tm_year = y - 1900;
+    tm.tm_mon = m - 1;
+    tm.tm_mday = d;
+    tm.tm_isdst = -1;
 
-  time_t t = mktime (&tm);
-  t += (long long)days * 24 * 60 * 60;
-  struct tm *newTm = localtime (&t);
+    time_t t = mktime(&tm);
+    t += (long long)days * 24 * 60 * 60;
+    struct tm *newTm = localtime(&t);
 
-  ostringstream oss;
-  oss << setfill ('0') << setw (4) << (newTm->tm_year + 1900) << setw (2)
-      << (newTm->tm_mon + 1) << setw (2) << newTm->tm_mday;
-  return oss.str ();
+    ostringstream oss;
+    oss << setfill('0') << setw(4) << (newTm->tm_year + 1900) << setw(2)
+        << (newTm->tm_mon + 1) << setw(2) << newTm->tm_mday;
+    return oss.str();
 }
 
 string
-getTime (int period, bool isStart)
+getTime(int period, bool isStart)
 {
-  if (isStart)
+    if (isStart)
     {
-      switch (period)
+        switch (period)
         {
         case 1:
-          return "083000";
+            return "083000";
         case 2:
-          return "092500";
+            return "092500";
         case 3:
-          return "103000";
+            return "103000";
         case 4:
-          return "112500";
+            return "112500";
         case 5:
-          return "140000";
+            return "140000";
         case 6:
-          return "145500";
+            return "145500";
         case 7:
-          return "160000";
+            return "160000";
         case 8:
-          return "165500";
+            return "165500";
         case 9:
-          return "183000";
+            return "183000";
         case 10:
-          return "192500";
+            return "192500";
         case 11:
-          return "203000";
+            return "203000";
         case 12:
-          return "212500";
+            return "212500";
         default:
-          return "000000";
+            return "000000";
         }
     }
-  else
+    else
     {
-      switch (period)
+        switch (period)
         {
         case 1:
-          return "091500";
+            return "091500";
         case 2:
-          return "101000";
+            return "101000";
         case 3:
-          return "111500";
+            return "111500";
         case 4:
-          return "121000";
+            return "121000";
         case 5:
-          return "144500";
+            return "144500";
         case 6:
-          return "154000";
+            return "154000";
         case 7:
-          return "164500";
+            return "164500";
         case 8:
-          return "174000";
+            return "174000";
         case 9:
-          return "191500";
+            return "191500";
         case 10:
-          return "201000";
+            return "201000";
         case 11:
-          return "211500";
+            return "211500";
         case 12:
-          return "221000";
+            return "221000";
         default:
-          return "000000";
+            return "000000";
         }
     }
 }
 
-int
-main (int argc, char *argv[])
+extern "C"
 {
-  ifstream file ("exp.html"); // 打开抓取的 HTML 文件
-  if (!file.is_open ())
-    {
-      cerr << "无法打开 exp.html" << endl;
-      return 1; // 文件打开失败退出
-    }
-  string content ((istreambuf_iterator<char> (file)),
-                  istreambuf_iterator<char> ()); // 读取全部内容
-  file.close ();                                 // 关闭文件
+#ifdef _WIN32
+    __declspec(dllexport)
+#endif
+    int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable_html);
+}
 
-  string colMark = "kbappTimetableDayColumnRoot"; // 定义每一列课表的标记
-  vector<string> dayHtmls;                        // 存储每一天的 HTML 片段
-  size_t lastPos = 0;                             // 上一次查找的位置
-  while (true)
+int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable_html)
+{
+    string startSunday(c_date);
+
+    ifstream file("exp.html"); // 打开抓取的 HTML 文件
+    if (!file.is_open())
     {
-      size_t pos = content.find (colMark, lastPos); // 查找列标记
-      if (pos == string::npos)
-        break;                                       // 找不到了则退出循环
-      size_t startDiv = content.rfind ("<div", pos); // 向上寻找 div 的开始
-      size_t nextPos = content.find (
-          colMark, pos + colMark.length ()); // 查找下一个列标记
-      if (nextPos == string::npos)
+        LOG_ERROR << "Failed to open exp.html";
+        return 1; // 文件打开失败退出
+    }
+    string content((istreambuf_iterator<char>(file)),
+                   istreambuf_iterator<char>()); // 读取全部内容
+    file.close();                                // 关闭文件
+
+    string colMark = "kbappTimetableDayColumnRoot"; // 定义每一列课表的标记
+    vector<string> dayHtmls;                        // 存储每一天的 HTML 片段
+    size_t lastPos = 0;                             // 上一次查找的位置
+    while (true)
+    {
+        size_t pos = content.find(colMark, lastPos); // 查找列标记
+        if (pos == string::npos)
+            break;                                    // 找不到了则退出循环
+        size_t startDiv = content.rfind("<div", pos); // 向上寻找 div 的开始
+        size_t nextPos = content.find(
+            colMark, pos + colMark.length()); // 查找下一个列标记
+        if (nextPos == string::npos)
         {
-          nextPos
-              = content.find ("</div>\n", pos); // 若是最后一列，寻找闭合标签
-          if (nextPos == string::npos)
-            nextPos = content.length (); // 保守方案：截取到文件末尾
+            nextPos = content.find("</div>\n", pos); // 若是最后一列，寻找闭合标签
+            if (nextPos == string::npos)
+                nextPos = content.length(); // 保守方案：截取到文件末尾
         }
-      else
+        else
         {
-          nextPos = content.rfind ("<div", nextPos); // 记录下一列 div 的起始
+            nextPos = content.rfind("<div", nextPos); // 记录下一列 div 的起始
         }
-      dayHtmls.push_back (
-          content.substr (startDiv, nextPos - startDiv)); // 截取该天的数据
-      lastPos = pos + colMark.length ();                  // 更新查找起点
-      if (dayHtmls.size () == 7)
-        break; // 抓够 7 天则强制退出
+        dayHtmls.push_back(
+            content.substr(startDiv, nextPos - startDiv)); // 截取该天的数据
+        lastPos = pos + colMark.length();                  // 更新查找起点
+        if (dayHtmls.size() == 7)
+            break; // 抓够 7 天则强制退出
     }
 
-  vector<Course> courses;                 // 存储解析出的课程列表
-  string semesterInfo = "2025-2026 秋季"; // 默认值
+    vector<Course> courses;                 // 存储解析出的课程列表
+    string semesterInfo = "2025-2026 秋季"; // 默认值
 
-  // 尝试提取学期信息
-  regex semesterRegex ("selected=\"\">([^<]+学年 [^<]+)\\(当前\\)");
-  smatch sMatch;
-  if (regex_search (content, sMatch, semesterRegex))
+    // 尝试提取学期信息
+    regex semesterRegex("selected=\"\">([^<]+学年 [^<]+)\\(当前\\)");
+    smatch sMatch;
+    if (regex_search(content, sMatch, semesterRegex))
     {
-      semesterInfo = sMatch[1].str ();
-      // 清理 "(当前)" 这种后缀
-      size_t cpos = semesterInfo.find ("(");
-      if (cpos != string::npos)
-        semesterInfo = semesterInfo.substr (0, cpos);
+        semesterInfo = sMatch[1].str();
+        // 清理 "(当前)" 这种后缀
+        size_t cpos = semesterInfo.find("(");
+        if (cpos != string::npos)
+            semesterInfo = semesterInfo.substr(0, cpos);
     }
 
-  for (int dayIndex = 0; dayIndex < (int)dayHtmls.size (); ++dayIndex)
+    for (int dayIndex = 0; dayIndex < (int)dayHtmls.size(); ++dayIndex)
     {
-      string dayHtml = dayHtmls[dayIndex]; // 获取当天的 HTML
-      regex slotRegex ("<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)"
-                       ">"); // 匹配课程格子的
-                             // flex 值
-      auto it = sregex_iterator (dayHtml.begin (), dayHtml.end (), slotRegex);
-      auto end = sregex_iterator ();
+        string dayHtml = dayHtmls[dayIndex]; // 获取当天的 HTML
+        regex slotRegex("<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)"
+                        ">"); // 匹配课程格子的
+                              // flex 值
+        auto it = sregex_iterator(dayHtml.begin(), dayHtml.end(), slotRegex);
+        auto end = sregex_iterator();
 
-      if (it != end)
-        ++it; // 跳过最外层的列容器 div
+        if (it != end)
+            ++it; // 跳过最外层的列容器 div
 
-      int currentPeriod = 1; // 当前节数计数器
-      for (; it != end; ++it)
+        int currentPeriod = 1; // 当前节数计数器
+        for (; it != end; ++it)
         {
-          smatch m = *it;
-          string attributes = m[1]; // 获取属性字符串
-          int flex = stoi (m[2]);   // 提取 flex 值（代表占用的节数）
-          bool isTopLevel
-              = (attributes.find ("class=") == string::npos
-                 || attributes.find ("kbappTimetableDayColumn")
-                        != string::
-                            npos); // 判断是否为顶层课程块（包含冲突容器和普通课程块）
-          if (!isTopLevel)
-            continue; // 非顶层块则跳过
+            smatch m = *it;
+            string attributes = m[1]; // 获取属性字符串
+            int flex = stoi(m[2]);    // 提取 flex 值（代表占用的节数）
+            bool isTopLevel = (attributes.find("class=") == string::npos || attributes.find("kbappTimetableDayColumn") != string::
+                                                                                                                              npos); // 判断是否为顶层课程块（包含冲突容器和普通课程块）
+            if (!isTopLevel)
+                continue; // 非顶层块则跳过
 
-          // 提取当前块内部的 HTML 内容
-          size_t startPos = m.position () + m.length ();
-          size_t endPos = dayHtml.length ();
-          auto nextIt = it;
-          for (++nextIt; nextIt != end; ++nextIt)
+            // 提取当前块内部的 HTML 内容
+            size_t startPos = m.position() + m.length();
+            size_t endPos = dayHtml.length();
+            auto nextIt = it;
+            for (++nextIt; nextIt != end; ++nextIt)
             {
-              string nextAttr = (*nextIt)[1];
-              if (nextAttr.find ("class=") == string::npos
-                  || nextAttr.find ("kbappTimetableDayColumn") != string::npos)
+                string nextAttr = (*nextIt)[1];
+                if (nextAttr.find("class=") == string::npos || nextAttr.find("kbappTimetableDayColumn") != string::npos)
                 {
-                  endPos = (*nextIt).position (); // 确定当前块的结束位置
-                  break;
+                    endPos = (*nextIt).position(); // 确定当前块的结束位置
+                    break;
                 }
             }
-          string innerHtml = dayHtml.substr (startPos, endPos - startPos);
+            string innerHtml = dayHtml.substr(startPos, endPos - startPos);
 
-          regex titleRegex ("class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</"
-                            "div>"); // 匹配课程标题
-          auto titleIt = sregex_iterator (innerHtml.begin (), innerHtml.end (),
-                                          titleRegex);
-          auto titleEnd = sregex_iterator ();
+            regex titleRegex("class=\"title[^\"]*\">\\s*([\\s\\S]+?)\\s*</"
+                             "div>"); // 匹配课程标题
+            auto titleIt = sregex_iterator(innerHtml.begin(), innerHtml.end(),
+                                           titleRegex);
+            auto titleEnd = sregex_iterator();
 
-          for (; titleIt != titleEnd; ++titleIt)
+            for (; titleIt != titleEnd; ++titleIt)
             {
-              smatch tm = *titleIt;
-              Course c;
-              c.day = dayIndex;                       // 记录星期
-              c.startPeriod = currentPeriod;          // 记录起始节数
-              c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
-              c.title = clean (tm[1]);                // 提取并清理标题
+                smatch tm = *titleIt;
+                Course c;
+                c.day = dayIndex;                       // 记录星期
+                c.startPeriod = currentPeriod;          // 记录起始节数
+                c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
+                c.title = clean(tm[1]);                 // 提取并清理标题
 
-              // 过滤掉非课程的页面干扰项
-              if (c.title == "我的应用" || c.title == "公告消息情况"
-                  || c.title == "学习日程"
-                  || c.title.find ("2026-") != string::npos)
-                continue;
-
-              size_t blockStart = tm.position () + tm.length ();
-              auto titleNext = titleIt;
-              ++titleNext;
-              size_t blockEnd = (titleNext == titleEnd)
-                                    ? innerHtml.length ()
-                                    : titleNext->position ();
-              string itemInfoHtml
-                  = innerHtml.substr (blockStart, blockEnd - blockStart);
-
-              regex infoRegex (
-                  "class=\"kbappTimetableCourseRenderCourseItemInfoText["
-                  "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
-              auto infoIt = sregex_iterator (itemInfoHtml.begin (),
-                                             itemInfoHtml.end (), infoRegex);
-              bool firstInfo = true;
-              for (; infoIt != sregex_iterator (); ++infoIt)
-                {
-                  string info = clean ((*infoIt)[1]); // 清理信息文字
-                  if (info.empty ())
+                // 过滤掉非课程的页面干扰项
+                if (c.title == "我的应用" || c.title == "公告消息情况" || c.title == "学习日程" || c.title.find("2026-") != string::npos)
                     continue;
-                  if (firstInfo)
+
+                size_t blockStart = tm.position() + tm.length();
+                auto titleNext = titleIt;
+                ++titleNext;
+                size_t blockEnd = (titleNext == titleEnd)
+                                      ? innerHtml.length()
+                                      : titleNext->position();
+                string itemInfoHtml = innerHtml.substr(blockStart, blockEnd - blockStart);
+
+                regex infoRegex(
+                    "class=\"kbappTimetableCourseRenderCourseItemInfoText["
+                    "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
+                auto infoIt = sregex_iterator(itemInfoHtml.begin(),
+                                              itemInfoHtml.end(), infoRegex);
+                bool firstInfo = true;
+                for (; infoIt != sregex_iterator(); ++infoIt)
+                {
+                    string info = clean((*infoIt)[1]); // 清理信息文字
+                    if (info.empty())
+                        continue;
+                    if (firstInfo)
                     {
-                      // 1. 提取周数部分
-                      regex weekRegex ("([0-9\\-,]+周(\\((单|双)\\))?)");
-                      smatch wmatch;
-                      if (regex_search (info, wmatch, weekRegex))
-                        c.weekStr = wmatch.str ();
-                      else
-                        c.weekStr = "";
+                        // 1. 提取周数部分
+                        regex weekRegex("([0-9\\-,]+周(\\((单|双)\\))?)");
+                        smatch wmatch;
+                        if (regex_search(info, wmatch, weekRegex))
+                            c.weekStr = wmatch.str();
+                        else
+                            c.weekStr = "";
 
-                      c.weeks = parseWeeks (info);        // 解析周数数组
-                      c.location = formatLocation (info); // 提取地点
+                        c.weeks = parseWeeks(info);        // 解析周数数组
+                        c.location = formatLocation(info); // 提取地点
 
-                      // 2. 提取教师姓名
-                      // (从第一行中剔除周数和地点关键字后的部分)
-                      string teacher = info;
-                      if (!c.weekStr.empty ())
+                        // 2. 提取教师姓名
+                        // (从第一行中剔除周数和地点关键字后的部分)
+                        string teacher = info;
+                        if (!c.weekStr.empty())
                         {
-                          size_t wpos = teacher.find (c.weekStr);
-                          if (wpos != string::npos)
-                            teacher.erase (wpos, c.weekStr.length ());
+                            size_t wpos = teacher.find(c.weekStr);
+                            if (wpos != string::npos)
+                                teacher.erase(wpos, c.weekStr.length());
                         }
-                      size_t locKeyPos = teacher.find ("浑南校区");
-                      if (locKeyPos == string::npos)
-                        locKeyPos = teacher.find ("南湖校区");
-                      if (locKeyPos != string::npos)
+                        size_t locKeyPos = teacher.find("浑南校区");
+                        if (locKeyPos == string::npos)
+                            locKeyPos = teacher.find("南湖校区");
+                        if (locKeyPos != string::npos)
                         {
-                          teacher.erase (locKeyPos);
+                            teacher.erase(locKeyPos);
                         }
-                      else if (!c.location.empty ())
+                        else if (!c.location.empty())
                         {
-                          size_t lpos = teacher.find (c.location);
-                          if (lpos != string::npos)
-                            teacher.erase (lpos, c.location.length ());
+                            size_t lpos = teacher.find(c.location);
+                            if (lpos != string::npos)
+                                teacher.erase(lpos, c.location.length());
                         }
-                      teacher = clean (teacher);
-                      if (!teacher.empty ())
+                        teacher = clean(teacher);
+                        if (!teacher.empty())
                         {
-                          if (!c.description.empty ())
-                            c.description += ",";
-                          c.description += teacher;
+                            if (!c.description.empty())
+                                c.description += ",";
+                            c.description += teacher;
                         }
 
-                      firstInfo = false;
+                        firstInfo = false;
                     }
-                  else
+                    else
                     {
-                      if (!c.description.empty ())
-                        c.description += ",";
-                      c.description += info; // 拼接其他信息（通常是教师）
+                        if (!c.description.empty())
+                            c.description += ",";
+                        c.description += info; // 拼接其他信息（通常是教师）
                     }
                 }
-              if (!c.title.empty ())
+                if (!c.title.empty())
                 {
-                  courses.push_back (c); // 加入课程列表
+                    courses.push_back(c); // 加入课程列表
+                    LOG_DEBUG << "Parsed Course: " << c.title << ", (" << c.weekStr << " " << c.location << ") D" << c.day << " T" << c.startPeriod << "-" << c.endPeriod;
                 }
             }
-          currentPeriod += flex; // 更新当前节数
+            currentPeriod += flex; // 更新当前节数
         }
     }
 
-  cout << "成功提取 " << courses.size () << " 门课程。" << endl;
+    LOG_INFO << "Successfully extracted " << courses.size() << " courses.";
 
-  string startSunday;
-  if (argc > 1)
+    LOG_INFO << "Start date provided: " << startSunday;
+
+    if (startSunday.empty())
     {
-      startSunday = argv[1]; // 从命令行获取日期
-      cout << "使用命令行参数日期: " << startSunday << endl;
-    }
-  else
-    {
-      cout << "请输入学期第一周周日的日期 (格式 YYYY-MM-DD): ";
-      if (!(cin >> startSunday))
         startSunday = "2026-03-01"; // 默认备份日期
     }
 
-  ofstream ics ("schedule.ics"); // 创建输出文件
-  ics << "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//NEU Course Table//CN\n";
-  int totalEvents = 0;
-  for (const auto &c : courses)
+    if (enable_ics)
     {
-      for (int week : c.weeks)
+        ofstream ics("schedule.ics"); // 创建输出文件
+        ics << "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//NEU Course Table//CN\n";
+        int totalEvents = 0;
+        for (const auto &c : courses)
         {
-          string date
-              = addDays (startSunday, c.day + (week - 1) * 7); // 计算具体日期
-          string startTime = getTime (c.startPeriod, true);    // 获取起始时间
-          string endTime = getTime (c.endPeriod, false);       // 获取结束时间
-          ics << "BEGIN:VEVENT\n";
-          ics << "SUMMARY:" << c.title << "\n";           // 写入标题
-          ics << "LOCATION:" << c.location << "\n";       // 写入地点
-          ics << "DESCRIPTION:" << c.description << "\n"; // 写入详情
-          ics << "DTSTART:" << date << "T" << startTime
-              << "\n";                                       // 写入开始时间
-          ics << "DTEND:" << date << "T" << endTime << "\n"; // 写入结束时间
-          ics << "END:VEVENT\n";
-          totalEvents++; // 计数
-        }
-    }
-  ics << "END:VCALENDAR\n";
-  ics.close (); // 关闭文件
-  cout << "生成完成，保存在 schedule.ics" << endl;
-
-  // 生成 CSV 课程表
-  ofstream csv ("courses.csv");
-  csv << "课程名称,星期,开始节数,结束节数,老师,地点,周数\n";
-  for (const auto &c : courses)
-    {
-      if (c.weeks.empty ())
-        continue;
-
-      // 复制并排序周数
-      vector<int> sortedWeeks = c.weeks;
-      sort (sortedWeeks.begin (), sortedWeeks.end ());
-
-      // 转换星期：0(周日)->7, 1(周一)->1 ... 6(周六)->6
-      int displayDay = (c.day == 0) ? 7 : c.day;
-      string teacher = c.description;
-      if (teacher.empty ())
-        teacher = "无";
-      string location = c.location.empty () ? "无" : c.location;
-
-      // 查找连续的周数段
-      int startW = sortedWeeks[0];
-      int prevW = sortedWeeks[0];
-
-      for (size_t i = 1; i <= sortedWeeks.size (); ++i)
-        {
-          if (i < sortedWeeks.size () && sortedWeeks[i] == prevW + 1)
+            for (int week : c.weeks)
             {
-              prevW = sortedWeeks[i];
-            }
-          else
-            {
-              // 发现一段连续周落幕，生成一条记录
-              string rangeStr;
-              if (startW == prevW)
-                {
-                  rangeStr = to_string (startW) + "周";
-                }
-              else
-                {
-                  rangeStr
-                      = to_string (startW) + "-" + to_string (prevW) + "周";
-                }
-
-              csv << csvQuote (c.title) << "," << displayDay << ","
-                  << c.startPeriod << "," << c.endPeriod << ","
-                  << csvQuote (teacher) << "," << csvQuote (location) << ","
-                  << csvQuote (rangeStr) << "\n";
-
-              if (i < sortedWeeks.size ())
-                {
-                  startW = sortedWeeks[i];
-                  prevW = sortedWeeks[i];
-                }
+                string date = addDays(startSunday, c.day + (week - 1) * 7); // 计算具体日期
+                string startTime = getTime(c.startPeriod, true);            // 获取起始时间
+                string endTime = getTime(c.endPeriod, false);               // 获取结束时间
+                ics << "BEGIN:VEVENT\n";
+                ics << "SUMMARY:" << c.title << "\n";           // 写入标题
+                ics << "LOCATION:" << c.location << "\n";       // 写入地点
+                ics << "DESCRIPTION:" << c.description << "\n"; // 写入详情
+                ics << "DTSTART:" << date << "T" << startTime
+                    << "\n";                                       // 写入开始时间
+                ics << "DTEND:" << date << "T" << endTime << "\n"; // 写入结束时间
+                ics << "END:VEVENT\n";
+                totalEvents++; // 计数
+                LOG_DEBUG << "Writing ICS: W" << week << " " << date << " " << c.title;
             }
         }
+        ics << "END:VCALENDAR\n";
+        ics.close(); // 关闭文件
+        LOG_INFO << "Generated successfully: schedule.ics";
     }
-  csv.close ();
-  cout << "CSV 课程表已生成: courses.csv" << endl;
 
+    if (enable_csv)
+    {
+        // 生成 CSV 课程表
+        ofstream csv("courses.csv");
+        csv << "课程名称,星期,开始节数,结束节数,老师,地点,周数\n";
+        for (const auto &c : courses)
+        {
+            if (c.weeks.empty())
+                continue;
+
+            // 复制并排序周数
+            vector<int> sortedWeeks = c.weeks;
+            sort(sortedWeeks.begin(), sortedWeeks.end());
+
+            // 转换星期：0(周日)->7, 1(周一)->1 ... 6(周六)->6
+            int displayDay = (c.day == 0) ? 7 : c.day;
+            string teacher = c.description;
+            if (teacher.empty())
+                teacher = "无";
+            string location = c.location.empty() ? "无" : c.location;
+
+            // 查找连续的周数段
+            int startW = sortedWeeks[0];
+            int prevW = sortedWeeks[0];
+
+            for (size_t i = 1; i <= sortedWeeks.size(); ++i)
+            {
+                if (i < sortedWeeks.size() && sortedWeeks[i] == prevW + 1)
+                {
+                    prevW = sortedWeeks[i];
+                }
+                else
+                {
+                    // 发现一段连续周落幕，生成一条记录
+                    string rangeStr;
+                    if (startW == prevW)
+                    {
+                        rangeStr = to_string(startW) + "周";
+                    }
+                    else
+                    {
+                        rangeStr = to_string(startW) + "-" + to_string(prevW) + "周";
+                    }
+
+                    csv << csvQuote(c.title) << "," << displayDay << ","
+                        << c.startPeriod << "," << c.endPeriod << ","
+                        << csvQuote(teacher) << "," << csvQuote(location) << ","
+                        << csvQuote(rangeStr) << "\n";
+                    LOG_DEBUG << "Writing CSV: D" << displayDay << " T" << c.startPeriod << "-" << c.endPeriod << " " << c.title << " " << rangeStr;
+
+                    if (i < sortedWeeks.size())
+                    {
+                        startW = sortedWeeks[i];
+                        prevW = sortedWeeks[i];
+                    }
+                }
+            }
+        }
+        csv.close();
+        LOG_INFO << "Generated successfully: courses.csv";
+    }
+
+    if (enable_html)
+    {
 #ifdef _WIN32
-  system ("if not exist eams mkdir eams");
+        system("if not exist eams mkdir eams");
 #else
-  system ("mkdir -p eams");
+        system("mkdir -p eams");
 #endif
 
-  // 生成旧版样式的 HTML 课表 (同步生成本地预览和 EAMS 模拟路径)
-  ofstream html ("exp_old.html");
-  ofstream html_eams ("eams/courseTableForStd.action");
+        // 生成旧版样式的 HTML 课表 (同步生成本地预览和 EAMS 模拟路径)
+        ofstream html("exp_old.html");
+        ofstream html_eams("eams/courseTableForStd.action");
 
-  string h_header = R"(<!DOCTYPE html>
+        string h_header = R"(<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="content-type" content="text/html; charset=utf-8">
@@ -671,7 +780,7 @@ main (int argc, char *argv[])
                         选择教学周: 全部 | 
                         学年学期: )";
 
-  string h_middle = R"(
+        string h_middle = R"(
                         <button style="float:right;">切换学期</button>
                     </div>
 
@@ -693,80 +802,78 @@ main (int argc, char *argv[])
                             </thead>
                             <tbody>)";
 
-  stringstream t_body;
-  vector<Course *> cgrid[13][7];
-  for (auto &c : courses)
-    {
-      if (c.day >= 0 && c.day < 7 && c.startPeriod >= 1 && c.startPeriod <= 12)
-        cgrid[c.startPeriod][c.day].push_back (&c);
-    }
-
-  bool occupied[13][7] = { false };
-  const char *pNames[]
-      = { "",        " 第一节",   " 第二节",  " 第三节", " 第四节",
-          " 第五节", " 第六节",   " 第七节",  " 第八节", " 第九节",
-          " 第十节", " 第十一节", " 第十二节" };
-
-  for (int p = 1; p <= 12; ++p)
-    {
-      t_body << "<tr>";
-      t_body << "<td class='period-label'>" << pNames[p] << "</td>";
-
-      for (int d = 0; d < 7; ++d)
+        stringstream t_body;
+        vector<Course *> cgrid[13][7];
+        for (auto &c : courses)
         {
-          if (occupied[p][d])
-            continue;
-
-          if (cgrid[p][d].empty ())
-            {
-              t_body << "<td style='background-color: #ffffff;'></td>";
-              continue;
-            }
-
-          int mEnd = p;
-          for (auto *cptr : cgrid[p][d])
-            {
-              if (cptr->endPeriod > mEnd)
-                mEnd = cptr->endPeriod;
-            }
-          if (mEnd > 12)
-            mEnd = 12;
-
-          int rowspan = mEnd - p + 1;
-
-          string tAttr;
-          for (size_t i = 0; i < cgrid[p][d].size (); ++i)
-            {
-              Course *cptr = cgrid[p][d][i];
-              if (i > 0)
-                tAttr += "; ";
-              tAttr += cptr->title + " (" + cptr->description + "); ("
-                       + cptr->weekStr + ", " + cptr->location + ")";
-            }
-
-          t_body << "<td class='infoTitle' rowspan='" << rowspan << "' title='"
-                 << escapeHtml (tAttr) << "'>";
-          t_body << "<div class='course-box'>";
-
-          for (size_t i = 0; i < cgrid[p][d].size (); ++i)
-            {
-              Course *cptr = cgrid[p][d][i];
-              t_body << cptr->title << "<br>(" << cptr->description << ")";
-              t_body << "<br>(" << cptr->weekStr << ", " << cptr->location
-                     << ")";
-              if (i < cgrid[p][d].size () - 1)
-                t_body << "<br>---<br>";
-            }
-
-          t_body << "</div></td>";
-
-          for (int r = p; r <= mEnd; ++r)
-            occupied[r][d] = true;
+            if (c.day >= 0 && c.day < 7 && c.startPeriod >= 1 && c.startPeriod <= 12)
+                cgrid[c.startPeriod][c.day].push_back(&c);
         }
-      t_body << "</tr>";
-    }
 
-  string h_footer = R"(                            </tbody>
+        bool occupied[13][7] = {false};
+        const char *pNames[] = {"", " 第一节", " 第二节", " 第三节", " 第四节",
+                                " 第五节", " 第六节", " 第七节", " 第八节", " 第九节",
+                                " 第十节", " 第十一节", " 第十二节"};
+
+        for (int p = 1; p <= 12; ++p)
+        {
+            t_body << "<tr>";
+            t_body << "<td class='period-label'>" << pNames[p] << "</td>";
+
+            for (int d = 0; d < 7; ++d)
+            {
+                if (occupied[p][d])
+                    continue;
+
+                if (cgrid[p][d].empty())
+                {
+                    t_body << "<td style='background-color: #ffffff;'></td>";
+                    continue;
+                }
+
+                int mEnd = p;
+                for (auto *cptr : cgrid[p][d])
+                {
+                    if (cptr->endPeriod > mEnd)
+                        mEnd = cptr->endPeriod;
+                }
+                if (mEnd > 12)
+                    mEnd = 12;
+
+                int rowspan = mEnd - p + 1;
+
+                string tAttr;
+                for (size_t i = 0; i < cgrid[p][d].size(); ++i)
+                {
+                    Course *cptr = cgrid[p][d][i];
+                    if (i > 0)
+                        tAttr += "; ";
+                    tAttr += cptr->title + " (" + cptr->description + "); (" + cptr->weekStr + ", " + cptr->location + ")";
+                }
+
+                t_body << "<td class='infoTitle' rowspan='" << rowspan << "' title='"
+                       << escapeHtml(tAttr) << "'>";
+                t_body << "<div class='course-box'>";
+
+                for (size_t i = 0; i < cgrid[p][d].size(); ++i)
+                {
+                    Course *cptr = cgrid[p][d][i];
+                    t_body << cptr->title << "<br>(" << cptr->description << ")";
+                    t_body << "<br>(" << cptr->weekStr << ", " << cptr->location
+                           << ")";
+                    if (i < cgrid[p][d].size() - 1)
+                        t_body << "<br>---<br>";
+                }
+
+                t_body << "</div></td>";
+
+                for (int r = p; r <= mEnd; ++r)
+                    occupied[r][d] = true;
+            }
+            t_body << "</tr>";
+        }
+
+        string h_footer = R"(                            </tbody>
                         </table>
                     </div>
                 </div>
@@ -776,21 +883,32 @@ main (int argc, char *argv[])
 </body>
 </html>)";
 
-  string final_html
-      = h_header + semesterInfo + h_middle + t_body.str () + h_footer;
-  html << final_html;
-  html_eams << final_html;
+        string final_html = h_header + semesterInfo + h_middle + t_body.str() + h_footer;
+        html << final_html;
+        html_eams << final_html;
 
-  // 新增：模拟 Wakeup/小艾等常用的数据接口请求，直接返回完整 HTML
-  ofstream html_data ("eams/courseTableForStd!courseTable.action");
-  html_data << final_html;
-  html_data.close ();
+        // 新增：模拟 Wakeup/小艾等常用的数据接口请求，直接返回完整 HTML
+        ofstream html_data("eams/courseTableForStd!courseTable.action");
+        html_data << final_html;
+        html_data.close();
 
-  html.close ();
-  html_eams.close ();
-  cout << "旧版 HTML 已同步生成至 exp_old.html 和 "
-          "eams/courseTableForStd.action 系列文件"
-       << endl;
+        html.close();
+        html_eams.close();
+        LOG_INFO << "Generated HTML to exp_old.html and eams/courseTableForStd.action";
+    }
 
-  return 0;
+    LOG_INFO << "Export operations finished successfully.";
+
+    return 0;
+}
+
+// 供独立运行时使用的 main 函数
+int main(int argc, char *argv[])
+{
+    string date = "2026-03-01";
+    if (argc > 1)
+    {
+        date = argv[1];
+    }
+    return run_parser(date.c_str(), true, true, true);
 }

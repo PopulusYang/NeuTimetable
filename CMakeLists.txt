@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
 project(NeuCourseTable)
 
+# 显式设定默认的 CMAKE_BUILD_TYPE 为 Debug，以消除 VS Code 的 IntelliSense 报警
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel." FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -10,31 +15,17 @@ if(MINGW)
 endif()
 
 # 1. 编译后端解析库/程序
-add_executable(NeuCourseTabel src/NeuCourseTabel.cpp)
-
-# 2. 编译窗口程序 (仅 Windows)
-if(WIN32)
-    add_executable(CourseTableApp WIN32 src/CourseTableGUI.cpp)
-    target_compile_definitions(CourseTableApp PRIVATE UNICODE _UNICODE)
-
-    # MinGW 需要额外的链接参数来支持 wWinMain
-    if(MINGW)
-        set_target_properties(CourseTableApp PROPERTIES LINK_FLAGS "-municode")
-    endif()
-
-    # 链接 Windows 必要库
-    target_link_libraries(CourseTableApp PRIVATE shell32 user32 gdi32)
-endif()
+add_library(NeuCourseTabel SHARED src/NeuCourseTabel.cpp)
+# 同时为了兼容老功能保留可执行文件(可选)
+add_executable(NeuCourseTabel_exe src/NeuCourseTabel.cpp)
 
 # 设置输出目录
-set_target_properties(NeuCourseTabel PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-if(WIN32)
-    set_target_properties(CourseTableApp PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
-endif()
+set_target_properties(NeuCourseTabel PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin" LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+set_target_properties(NeuCourseTabel_exe PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 # 复制脚本和启动项到输出目录
 if(WIN32)
-    add_custom_command(TARGET CourseTableApp POST_BUILD
+    add_custom_command(TARGET NeuCourseTabel_exe POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/src/neuscraper_ui.py"
             "${CMAKE_BINARY_DIR}/bin/neuscraper_ui.py"
@@ -44,9 +35,6 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/resources/static"
             "${CMAKE_BINARY_DIR}/bin/eams/static"
-        COMMAND ${CMAKE_COMMAND} -E copy
-            "${CMAKE_SOURCE_DIR}/RunApp.bat"
-            "${CMAKE_BINARY_DIR}/bin/RunApp.bat"
         COMMAND ${CMAKE_COMMAND} -E copy
             "${CMAKE_SOURCE_DIR}/requirements.txt"
             "${CMAKE_BINARY_DIR}/bin/requirements.txt"

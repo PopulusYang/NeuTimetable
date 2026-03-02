@@ -4,8 +4,8 @@
 a = Analysis(
     ['src\\main_gui.py'],
     pathex=[],
-    binaries=[('build\\bin\\libNeuCourseTabel.dll', '.')],
-    datas=[],
+    binaries=[('build/bin/libNeuCourseTabel.dll', '.')],
+    datas=[('C:\\Users\\ywxzg\\AppData\\Local\\ms-playwright\\chromium-1208', 'playwright-browsers/chromium-1208')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

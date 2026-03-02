@@ -40,16 +40,10 @@ cd "%SCRIPT_DIR%"
 
 :: 3. 最终整体封装为纯单文件 exe
 echo.
-echo [PyInstaller] 正在将所有代码彻底融合打包为单一 EXE...
+echo [PyInstaller] 正在将所有代码彻底融合打包为单一 EXE (含 Playwright 浏览器)...
 
-:: 执行单文件打包命令，利用 --add-binary 将上一步编译出来的 DLL 和自身绑定
-venv\Scripts\pyinstaller.exe ^
-    --onefile ^
-    --noconsole ^
-    --clean ^
-    --name "NeuCourseTable" ^
-    --add-binary "build\bin\libNeuCourseTabel.dll;." ^
-    src\main_gui.py
+:: 使用 Python 脚本动态计算浏览器路径并打包
+venv\Scripts\python.exe package_with_browser.py
 
 if %errorlevel% neq 0 (
     echo [Error] PyInstaller 整体打包失败！

@@ -12,7 +12,7 @@ echo ""
 # 1. 检查 Python3 是否安装
 if ! command -v python3 &> /dev/null; then
     echo "[Error] 未检测到 Python 3。请先安装 python3。"
-    echo "  Ubuntu/Debian: sudo apt install python3 python3-venv python3-pip"
+    echo "  Ubuntu/Debian: sudo apt install python3 python3-venv python3-pip python3-tk"
     echo "  macOS: brew install python3"
     exit 1
 fi

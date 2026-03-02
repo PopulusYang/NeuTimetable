@@ -3,10 +3,11 @@
 本项目旨在优化东北大学新版教务系统课表导出体验，提供一键全自动抓取、解析及局域网共享功能，并支持跨平台使用。不仅可以生成标准日历 (`.ics`) 文件，还可以还原旧版教务系统的课表页面用于第三方 App 导入(此方法经测试无法在wakeup上使用)。
 
 ## 核心特性
+- **内置浏览器内核**：程序内置 Chromium 浏览器内核，**无需用户安装任何浏览器**即可运行，真正的“开箱即用”。
 - **一键全自动**：输入学号密码，全自动完成登录、跳转、抓取、解析与导出。
 - **智能时间计算**：自动根据当前日期推算距离最近的新学期周日，告别手动翻日历。
-- **清爽界面**：全新设计的现代化 GUI 界面，内置运行日志监控窗口。
-- **局域网伪装 API**：内置简易服务器，开启后即可直接供**超级课程表**等第三方 App 自动抓取导入（完全模拟旧版系统接口，免除手动配置）。
+- **清爽界面**：全新设计的现代化 GUI 界面，内置运行日志监控窗口与交互式抓取助手。
+- **局域网伪装 API**：内置简易服务器，开启后即可直接供**超级课程表/小爱课程表**等第三方 App 自动抓取导入（完全模拟旧版系统接口，免除手动配置）。
 
 
 ## 编译与打包
@@ -14,14 +15,28 @@
 ### Windows
 建议使用项目提供的 `build_single_exe.bat` 脚本进行一键完整编译与打包。你需要提前安装好 CMake、C++ 编译器 (如 MinGW-w64) 及 Python。
 ```bat
-# 双击运行，或者在终端执行
+# 1. 克隆代码仓库
+git clone https://github.com/PopulusYang/NeuTimetable.git
+cd NeuTimetable
+
+# 2. 修改 build_single_exe.bat (可选)
+# 确保脚本中的 CMake 和编译器路径正确
+
+# 3. 双击运行，或者在终端执行
 .\build_single_exe.bat
 ```
-执行完毕后，会在 `dist/` 目录下生成纯净的单文件 `NeuCourseTable.exe`。
+执行完毕后，会在 `dist/` 目录下生成纯净的单文件 `NeuCourseTable.exe`，该文件已自行包含浏览器环境，可分发给任意 Windows 用户使用。
+
+**注意：** 首次编译前请确保网络畅通，因为脚本会自动下载 Playwright 浏览器内核。如果下载失败，请手动在虚拟环境中执行 `playwright install chromium`。
 
 ### Linux / macOS
 请确保拥有 CMake 与 C++ 编译器环境，使用以下命令编译并启动：
 ```bash
+# 安装依赖
+pip install -r requirements.txt
+playwright install chromium
+
+# 编译并运行
 chmod +x RunApp.sh
 ./RunApp.sh
 ```
@@ -39,4 +54,10 @@ chmod +x RunApp.sh
 ## 注意事项
 - 此程序针对**东北大学新版教务系统**（2026版以后：jwxt.neu.edu.cn）开发。
 - 若教务系统后续发生结构性更新，该方法可能会短暂失效，请关注项目更新。
+- **关于浏览器**：程序通过内置的 Chromium 运行，体积较大是正常现象（包含约 400MB+ 的浏览器内核）。
 - **免责声明**：本程序仅用于本地自动化脚本学习研究，您的密码与数据只会在本地处理，绝不会向任何第三方服务器发送，请放心使用。
+
+## 开源许可
+本项目核心代码完全开源，遵循 [MIT License](LICENSE) 协议。
+Chromium 浏览器内核遵循 [BSD 3-Clause License](https://chromium.googlesource.com/chromium/src/+/master/LICENSE) 等开源协议。
+

@@ -367,9 +367,12 @@ class App:
         try:
             # 加载 DLL
             base_dir = get_base_dir()
-            dll_name = (
-                "NeuCourseTabel.dll" if os.name == "nt" else "libNeuCourseTabel.dll"
-            )  # MacOS/Linux would be .so
+            if os.name == "nt":
+                dll_name = "NeuCourseTabel.dll"
+            elif sys.platform == "darwin":
+                dll_name = "libNeuCourseTabel.dylib"
+            else:
+                dll_name = "libNeuCourseTabel.so"
 
             # 兼容 MinGW 编译出来的名称
             if os.name == "nt" and not os.path.exists(os.path.join(base_dir, dll_name)):
@@ -386,6 +389,19 @@ class App:
                     os.path.join(base_dir, "..", "build", "bin", "NeuCourseTabel.dll")
                 ):
                     base_dir = os.path.join(base_dir, "..", "build", "bin")
+            
+            # 兼容 Linux/macOS 开发环境路径查找
+            if os.name != "nt" and not os.path.exists(os.path.join(base_dir, dll_name)):
+                # 尝试查找 build/bin 和 build 目录
+                dev_paths = [
+                    os.path.join(base_dir, "..", "build", "bin", dll_name),
+                    os.path.join(base_dir, "..", "build", dll_name)
+                ]
+                for p in dev_paths:
+                    if os.path.exists(p):
+                        base_dir = os.path.dirname(p)
+                        # dll_name 保持不变
+                        break
 
             dll_path = os.path.join(base_dir, dll_name)
             if not os.path.exists(dll_path):

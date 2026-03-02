@@ -31,7 +31,10 @@ def run(username="", password=""):
             )  # no_viewport 配合 start-maximized 使用
             page = context.new_page()
         except Exception as e:
-            print(f"启动浏览器失败: {e}")
+            msg = f"启动浏览器失败: {e}"
+            print(msg)
+            if "Executable doesn't exist at" in str(e):
+                print("\n[Tip] 似乎未安装浏览器内核，请尝试在终端执行: playwright install chromium")
             return
 
         # 定义浏览器内的状态注入函数

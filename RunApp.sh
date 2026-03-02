@@ -31,6 +31,8 @@ fi
 echo "[Info] 正在检查/更新依赖包..."
 source venv/bin/activate
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=100
+echo "[Info] 正在检查/安装 Playwright 浏览器..."
+playwright install chromium
 
 # 4. 检查是否需要编译 C++ 核心库 (libNeuCourseTabel.so / .dylib)
 OS_NAME=$(uname -s)

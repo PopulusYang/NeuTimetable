@@ -348,21 +348,36 @@ class App:
                 self.root.after(
                     0, lambda: self.status_var.set("抓取成功！正在自动生成课表...")
                 )
-                self.root.after(500, self.generate_ics)  # 自动调用生成函数
+                # 抓取完成后，回到主线程启动生成任务（从而安全获取 UI 数据并在后台处理）
+                self.root.after(500, self.generate_ics)
             except Exception as e:
                 self.root.after(0, lambda: self.status_var.set(f"发生错误: {str(e)}"))
 
         threading.Thread(target=scraper_thread, daemon=True).start()
 
     def generate_ics(self):
-        date = self.date_entry.get().encode("utf-8")  # 获取输入框日期并转码
+        # 获取输入框内容（主线程安全操作）
+        try:
+            date_str = self.date_entry.get()
+            enable_ics = bool(self.var_ics.get())
+            enable_csv = bool(self.var_csv.get())
+            enable_html = bool(self.var_html.get())
+            
+            # 在后台线程中运行耗时任务
+            threading.Thread(
+                target=self._generate_core,
+                args=(date_str, enable_ics, enable_csv, enable_html),
+                daemon=True
+            ).start()
+        except Exception as e:
+            messagebox.showerror("错误", f"无法启动生成任务: {e}")
 
-        # 获取开关状态
-        enable_ics = bool(self.var_ics.get())
-        enable_csv = bool(self.var_csv.get())
-        enable_html = bool(self.var_html.get())
-
-        self.status_var.set("正在解析并生成...")  # 更新状态
+    def _generate_core(self, date_str, enable_ics, enable_csv, enable_html):
+        # 后台线程执行核心生成逻辑
+        date = date_str.encode("utf-8")
+        
+        # 使用 after 更新 UI
+        self.root.after(0, lambda: self.status_var.set("正在解析并生成..."))
 
         try:
             # 加载 DLL
@@ -441,19 +456,20 @@ class App:
             result = parser_dll.run_parser(date, enable_ics, enable_csv, enable_html)
 
             if result == 0:
-                self.status_var.set("生成成功！")
-                messagebox.showinfo(
-                    "完成",
-                    "文件生成成功！",
-                )
+                self.root.after(0, lambda: self.status_var.set("生成成功！"))
+                self.root.after(0, lambda: messagebox.showinfo("完成", "文件生成成功！"))
             else:
-                self.status_var.set("解析失败")
-                messagebox.showerror("错误", f"解析失败，返回值：{result}")
+                self.root.after(0, lambda: self.status_var.set("解析失败"))
+                self.root.after(0, lambda: messagebox.showerror("错误", f"解析失败，返回值：{result}"))
+
         except FileNotFoundError:
-            self.status_var.set("错误：找不到 NeuCourseTabel 核心库")
-            messagebox.showerror(
+            self.root.after(0, lambda: self.status_var.set("错误：找不到 NeuCourseTabel 核心库"))
+            self.root.after(0, lambda: messagebox.showerror(
                 "错误", "找不到 NeuCourseTabel 链接库。\n请先执行编译。"
-            )
+            ))
+        except Exception as e:
+            self.root.after(0, lambda: self.status_var.set(f"发生错误: {str(e)}"))
+            self.root.after(0, lambda: messagebox.showerror("错误", f"发生未知错误: {str(e)}"))
         except Exception as e:
             self.status_var.set(f"发生错误: {str(e)}")
 

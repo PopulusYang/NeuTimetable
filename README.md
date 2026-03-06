@@ -2,7 +2,7 @@
 
 本项目旨在优化东北大学新版教务系统课表导出体验，提供一键全自动抓取、解析及局域网共享功能，并支持跨平台使用。不仅可以生成标准日历 (`.ics`) 文件，还可以还原旧版教务系统的课表页面用于第三方 App 导入(此方法经测试无法在wakeup上使用)。
 
-##Todo List（Coming Soooooooooooooooooooon!）
+## Todo List（Coming Soooooooooooooooooooon!）
 - 适配实验课课表
 - 修正一节课多个老师多个教室识别错误的bug
 

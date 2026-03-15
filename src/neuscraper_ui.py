@@ -8,24 +8,56 @@ import sys
 import time
 from playwright.sync_api import sync_playwright
 
-# 如果是打包环境，设置 Playwright 浏览器路径
+# 如果是打包环境且携带了内置浏览器，设置 Playwright 浏览器路径。
+# 无 Chromium 版本不会打包该目录，需回退到系统 Edge/Chrome。
 if getattr(sys, "frozen", False):
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = os.path.join(
-        sys._MEIPASS, "playwright-browsers"
-    )
+    bundled_browsers = os.path.join(sys._MEIPASS, "playwright-browsers")
+    if os.path.isdir(bundled_browsers):
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = bundled_browsers
 
 
 def run(username="", password=""):
-    print("正在启动内置浏览器...")
+    print("正在启动浏览器...")
 
     with sync_playwright() as p:
         try:
-            # 启动 Playwright 内置 Chromium 浏览器
-            # args 参数用于规避一些检测，并最大化窗口体验
-            browser = p.chromium.launch(
-                headless=False,
-                args=["--start-maximized", "--no-sandbox", "--disable-infobars"],
-            )
+            # 优先使用内置 Chromium；若无内置浏览器则回退系统 Edge/Chrome。
+            launch_args = ["--start-maximized", "--no-sandbox", "--disable-infobars"]
+            browser = None
+            launch_errors = []
+
+            try:
+                browser = p.chromium.launch(
+                    headless=False,
+                    args=launch_args,
+                )
+                print("已使用 Playwright Chromium 启动。")
+            except Exception as e:
+                launch_errors.append(f"chromium: {e}")
+
+            if browser is None:
+                # 允许通过环境变量强制通道：msedge / chrome / msedge-beta...
+                forced_channel = os.environ.get("NEU_BROWSER_CHANNEL", "").strip()
+                channels = [forced_channel] if forced_channel else ["msedge", "chrome"]
+                for channel in channels:
+                    try:
+                        if not channel:
+                            continue
+                        browser = p.chromium.launch(
+                            channel=channel,
+                            headless=False,
+                            args=launch_args,
+                        )
+                        print(f"已使用系统浏览器通道启动: {channel}")
+                        break
+                    except Exception as e:
+                        launch_errors.append(f"{channel}: {e}")
+
+            if browser is None:
+                raise RuntimeError(
+                    "; ".join(launch_errors) if launch_errors else "未能启动浏览器"
+                )
+
             context = browser.new_context(
                 no_viewport=True
             )  # no_viewport 配合 start-maximized 使用
@@ -33,9 +65,14 @@ def run(username="", password=""):
         except Exception as e:
             msg = f"启动浏览器失败: {e}"
             print(msg)
-            if "Executable doesn't exist at" in str(e):
+            if "Executable doesn't exist at" in str(e) or "browserType.launch" in str(
+                e
+            ):
                 print(
-                    "\n[Tip] 似乎未安装浏览器内核，请尝试在终端执行: playwright install chromium"
+                    "\n[Tip] 未找到可用浏览器。可选方案：\n"
+                    "1) 安装 Playwright Chromium: playwright install chromium\n"
+                    "2) 安装系统 Edge/Chrome 后重试\n"
+                    "3) 指定通道: set NEU_BROWSER_CHANNEL=msedge (或 chrome)"
                 )
             return
 

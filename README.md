@@ -7,6 +7,7 @@
 
 ## Todo List（Coming Soooooooooooooooooooon!）
 - 修正一节课多个老师多个教室识别错误的bug
+- 修正csv中教师位置信息量过大的bug
 
 ## 核心特性
 - **内置浏览器内核**：程序内置 Chromium 浏览器内核，**无需用户安装任何浏览器**即可运行，真正的“开箱即用”。
@@ -32,6 +33,23 @@ cd NeuTimetable
 .\build_single_exe.bat
 ```
 执行完毕后，会在 `dist/` 目录下生成纯净的单文件 `NeuCourseTable.exe`，该文件已自行包含浏览器环境，可分发给任意 Windows 用户使用。
+
+### Windows（无 Chromium 轻量版）
+如果你希望导出更小体积的 EXE，可使用：
+```bat
+.\build_single_exe_no_browser.bat
+```
+
+执行后会在 `dist/` 目录生成 `NeuCourseTable_NoChromium.exe`。该版本不携带 Playwright Chromium，运行时会按以下顺序启动浏览器：
+- Playwright Chromium（如果本机已安装）
+- 系统 Microsoft Edge
+- 系统 Google Chrome
+
+如需强制指定浏览器通道，可设置环境变量：
+```bat
+set NEU_BROWSER_CHANNEL=msedge
+```
+可选值示例：`msedge`、`chrome`。
 
 **注意：** 首次编译前请确保网络畅通，因为脚本会自动下载 Playwright 浏览器内核。如果下载失败，请手动在虚拟环境中执行 `playwright install chromium`。
 

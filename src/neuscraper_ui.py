@@ -6,6 +6,7 @@
 import os
 import sys
 import time
+import shutil
 from playwright.sync_api import sync_playwright
 
 # 如果是打包环境且携带了内置浏览器，设置 Playwright 浏览器路径。
@@ -52,6 +53,26 @@ def run(username="", password=""):
                         break
                     except Exception as e:
                         launch_errors.append(f"{channel}: {e}")
+
+            if browser is None:
+                # 最后兜底：尝试系统已安装的 chromium 可执行文件。
+                chromium_candidates = [
+                    shutil.which("chromium"),
+                    shutil.which("chromium-browser"),
+                ]
+                for executable in chromium_candidates:
+                    if not executable:
+                        continue
+                    try:
+                        browser = p.chromium.launch(
+                            executable_path=executable,
+                            headless=False,
+                            args=launch_args,
+                        )
+                        print(f"已使用系统 Chromium 启动: {executable}")
+                        break
+                    except Exception as e:
+                        launch_errors.append(f"{executable}: {e}")
 
             if browser is None:
                 raise RuntimeError(

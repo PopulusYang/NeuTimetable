@@ -31,8 +31,38 @@ fi
 echo "[Info] 正在检查/更新依赖包..."
 source venv/bin/activate
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=100
+
+# Linux 下补齐 Playwright Chromium 常见系统依赖（如 libnspr4/libnss3）
+if [ "$(uname -s)" = "Linux" ]; then
+    missing_libs=()
+    if ! ldconfig -p 2>/dev/null | grep -q "libnspr4.so"; then
+        missing_libs+=("libnspr4")
+    fi
+    if ! ldconfig -p 2>/dev/null | grep -q "libnss3.so"; then
+        missing_libs+=("libnss3")
+    fi
+
+    if [ ${#missing_libs[@]} -gt 0 ]; then
+        echo "[Info] 检测到缺少浏览器运行库: ${missing_libs[*]}"
+        if command -v apt-get >/dev/null 2>&1; then
+            if [ "$(id -u)" -eq 0 ]; then
+                apt-get update && apt-get install -y "${missing_libs[@]}"
+            elif command -v sudo >/dev/null 2>&1; then
+                sudo apt-get update && sudo apt-get install -y "${missing_libs[@]}"
+            else
+                echo "[Warn] 无法自动安装系统依赖（当前非 root 且无 sudo）。"
+                echo "      请手动执行: apt-get install -y ${missing_libs[*]}"
+            fi
+        else
+            echo "[Warn] 当前系统不支持 apt-get 自动安装，请手动安装: ${missing_libs[*]}"
+        fi
+    fi
+fi
+
 echo "[Info] 正在检查/安装 Playwright 浏览器..."
-playwright install chromium
+playwright install chromium || {
+    echo "[Warn] Playwright Chromium 安装失败，稍后将尝试使用系统浏览器通道启动。"
+}
 
 # 4. 检查是否需要编译 C++ 核心库 (libNeuCourseTabel.so / .dylib)
 OS_NAME=$(uname -s)

@@ -57,4 +57,3 @@ echo.
 echo [路径]: %SCRIPT_DIR%dist\NeuCourseTable_NoChromium.exe
 echo [说明]: 该版本不内置浏览器，请确保目标机器有 Edge/Chrome。
 echo ======================================================
-pause

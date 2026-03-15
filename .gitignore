@@ -29,3 +29,6 @@ exp.html
 # OS specific
 .DS_Store
 Thumbs.db
+
+
+/release/

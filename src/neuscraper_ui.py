@@ -34,7 +34,9 @@ def run(username="", password=""):
             msg = f"启动浏览器失败: {e}"
             print(msg)
             if "Executable doesn't exist at" in str(e):
-                print("\n[Tip] 似乎未安装浏览器内核，请尝试在终端执行: playwright install chromium")
+                print(
+                    "\n[Tip] 似乎未安装浏览器内核，请尝试在终端执行: playwright install chromium"
+                )
             return
 
         # 定义浏览器内的状态注入函数
@@ -235,15 +237,97 @@ def run(username="", password=""):
 
                         if has_timetable:
                             wait_data_timer += 1
-                            current_step_text = f"检测到课表数据！(校验 {wait_data_timer}/2)\n等待渲染完成..."
+                            current_step_text = f"检测到课表数据！(校验 {wait_data_timer}/5)\n等待渲染完成..."
                             update_browser_status(current_step_text)
-                            # 等待 2 秒确保页面 ajax 渲染完成
-                            if wait_data_timer >= 2:
+                            # 等待 5 秒确保页面 ajax 渲染完成
+                            if wait_data_timer >= 5:
                                 print("自动检测到学期课表已加载完成！触发自动抓取...")
                                 current_step_text = (
                                     "渲染完成！\n正在触发自动提取与打包..."
                                 )
                                 update_browser_status(current_step_text)
+
+                                # --- 新增：触发实验课 Tooltips ---
+                                print("正在尝试触发实验课详细信息的 Tooltip...")
+                                update_browser_status("正在提取实验课详情...")
+                                try:
+                                    time.sleep(1)  # 额外等待，确保渲染
+                                    titles = page.locator(
+                                        ".title___3o2RH:has-text('[实]')"
+                                    ).all()
+                                    exp_count = 0
+                                    print(
+                                        f"找到 {len(titles)} 个实验课标题元素，准备抓取 Tooltip..."
+                                    )
+
+                                    for t_handle in titles:
+                                        try:
+                                            txt = t_handle.inner_text()
+                                            if "[实]" in txt:
+                                                exp_count += 1
+                                                print(f"处理实验课: {txt}")
+
+                                                t_handle.hover()
+                                                time.sleep(0.5)
+
+                                                # 等待 Tooltip 出现
+                                                try:
+                                                    # 关键：获取 tooltip 内容
+                                                    tt_handle = page.wait_for_selector(
+                                                        ".ant-tooltip:not(.ant-tooltip-hidden) .ant-tooltip-inner",
+                                                        timeout=2000,
+                                                    )
+                                                    if tt_handle:
+                                                        text_content = (
+                                                            tt_handle.inner_text()
+                                                        )
+
+                                                        # 注入回 DOM - 修复语法
+                                                        page.evaluate(
+                                                            """(data) => {
+                                                            let titles = document.querySelectorAll('.title___3o2RH');
+                                                            for(let t of titles) {
+                                                                if(t.innerText.trim() === data.title.trim()) {
+                                                                    let wrapper = t.closest('.kbappTimetableCourseRenderCourseItem___MgPtp');
+                                                                    // 检查是否已注入
+                                                                    if(wrapper && !wrapper.querySelector('.scraper-injected-tooltip')) {
+                                                                        let div = document.createElement('div');
+                                                                        div.className = 'kbappTimetableCourseRenderCourseItemInfoText___2Zmwu scraper-injected-tooltip';
+                                                                        div.style.display = 'none';
+                                                                        div.innerText = data.content;
+                                                                        wrapper.appendChild(div);
+                                                                    }
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }""",
+                                                            {
+                                                                "title": txt,
+                                                                "content": text_content,
+                                                            },
+                                                        )
+
+                                                    # 移开鼠标
+                                                    page.mouse.move(0, 0)
+                                                    time.sleep(0.2)
+
+                                                except Exception:
+                                                    print(
+                                                        f"  -> 未能捕获 tooltip，跳过。"
+                                                    )
+                                                    continue
+
+                                        except Exception as inner_e:
+                                            print(f"  -> 处理课程元素出错: {inner_e}")
+                                            continue
+
+                                    print(
+                                        f"实验课详情提取完成！共处理 {exp_count} 个。"
+                                    )
+                                except Exception as e:
+                                    print(f"触发实验课 Tooltip 流程出错: {e}")
+                                # ---------------------------------
+
                                 time.sleep(1)
                                 break
                 except Exception as e:

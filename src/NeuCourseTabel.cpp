@@ -263,8 +263,11 @@ parseWeeks(string s)
         }
     }
     if (weeks.empty())
-        for (int i = 1; i <= 16; ++i)
-            weeks.push_back(i);
+    {
+        // Don't default here, allow caller to decide default
+        // for (int i = 1; i <= 16; ++i)
+        //    weeks.push_back(i);
+    }
     return weeks;
 }
 
@@ -443,14 +446,43 @@ int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable
     for (int dayIndex = 0; dayIndex < (int)dayHtmls.size(); ++dayIndex)
     {
         string dayHtml = dayHtmls[dayIndex]; // 获取当天的 HTML
+
+        // 仅提取“当天列”的直接子 div 起始位置，避免把嵌套结构中的 flex 占位误计入节次。
+        vector<size_t> directChildStarts;
+        size_t rootOpenEnd = dayHtml.find('>');
+        if (rootOpenEnd != string::npos)
+        {
+            int depth = 0;
+            size_t scanPos = rootOpenEnd + 1;
+            while (scanPos < dayHtml.size())
+            {
+                size_t nextOpen = dayHtml.find("<div", scanPos);
+                size_t nextClose = dayHtml.find("</div>", scanPos);
+                if (nextOpen == string::npos && nextClose == string::npos)
+                    break;
+
+                if (nextOpen != string::npos && (nextClose == string::npos || nextOpen < nextClose))
+                {
+                    if (depth == 0)
+                        directChildStarts.push_back(nextOpen);
+                    depth++;
+                    scanPos = nextOpen + 4;
+                }
+                else
+                {
+                    if (depth == 0)
+                        break;
+                    depth--;
+                    scanPos = nextClose + 6;
+                }
+            }
+        }
+
         regex slotRegex("<div([^>]+style=\"[^\"]*flex:\\s*(\\d+)[^\"]*\"[^>]*)"
                         ">"); // 匹配课程格子的
                               // flex 值
         auto it = sregex_iterator(dayHtml.begin(), dayHtml.end(), slotRegex);
         auto end = sregex_iterator();
-
-        if (it != end)
-            ++it; // 跳过最外层的列容器 div
 
         int currentPeriod = 1; // 当前节数计数器
         for (; it != end; ++it)
@@ -458,10 +490,24 @@ int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable
             smatch m = *it;
             string attributes = m[1]; // 获取属性字符串
             int flex = stoi(m[2]);    // 提取 flex 值（代表占用的节数）
+
+            // 只处理当天列的直接子块，忽略嵌套层的 flex。
+            bool isDirectChild = binary_search(directChildStarts.begin(), directChildStarts.end(), (size_t)m.position());
+            if (!isDirectChild)
+                continue;
+
             bool isTopLevel = (attributes.find("class=") == string::npos || attributes.find("kbappTimetableDayColumn") != string::
                                                                                                                               npos); // 判断是否为顶层课程块（包含冲突容器和普通课程块）
             if (!isTopLevel)
                 continue; // 非顶层块则跳过
+
+            // 无 class 的 flex 块是空白占位（用于表示中间无课节次），只推进节次，不解析课程。
+            // 否则会把后续课程标题误绑定到当前空白块，导致节次偏移。
+            if (attributes.find("class=") == string::npos)
+            {
+                currentPeriod += flex;
+                continue;
+            }
 
             // 提取当前块内部的 HTML 内容
             size_t startPos = m.position() + m.length();
@@ -488,13 +534,24 @@ int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable
             {
                 smatch tm = *titleIt;
                 Course c;
-                c.day = dayIndex;                       // 记录星期
-                c.startPeriod = currentPeriod;          // 记录起始节数
-                c.endPeriod = currentPeriod + flex - 1; // 计算结束节数
-                c.title = clean(tm[1]);                 // 提取并清理标题
+                c.day = dayIndex;                                                   // 记录星期
+                c.startPeriod = currentPeriod;                                      // 记录起始节数
+                c.endPeriod = currentPeriod + flex - 1;                             // 计算结束节数
+                c.title = clean(regex_replace(tm[1].str(), regex("<[^>]+>"), " ")); // 提取并清理标题（去除 HTML 标签）
 
                 // 过滤掉非课程的页面干扰项
                 if (c.title == "我的应用" || c.title == "公告消息情况" || c.title == "学习日程" || c.title.find("2026-") != string::npos)
+                    continue;
+
+                // 过滤课表头部的周次导航噪声（如“第3周 (3/9~3/15)”及其图标残留）
+                bool isWeekNavigatorNoise =
+                    c.title.find("teachingWeek") != string::npos ||
+                    c.title.find("aria-label") != string::npos ||
+                    c.title.find("svg") != string::npos ||
+                    c.title.find("icon___") != string::npos ||
+                    regex_search(c.title, regex("^第[0-9]+周")) ||
+                    regex_search(c.title, regex("\\([[:space:]]*[0-9]{1,2}/[0-9]{1,2}[[:space:]]*~[[:space:]]*[0-9]{1,2}/[0-9]{1,2}[[:space:]]*\\)"));
+                if (isWeekNavigatorNoise)
                     continue;
 
                 size_t blockStart = tm.position() + tm.length();
@@ -506,67 +563,93 @@ int run_parser(const char *c_date, bool enable_ics, bool enable_csv, bool enable
                 string itemInfoHtml = innerHtml.substr(blockStart, blockEnd - blockStart);
 
                 regex infoRegex(
-                    "class=\"kbappTimetableCourseRenderCourseItemInfoText["
-                    "^\"]*\">\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字
+                    "class=\"kbappTimetableCourseRenderCourseItemInfoText("
+                    "[^\"]*)\"[^>]*>\\s*([\\s\\S]+?)\\s*</div>"); // 匹配详情文字（兼容额外属性，如 style）
                 auto infoIt = sregex_iterator(itemInfoHtml.begin(),
                                               itemInfoHtml.end(), infoRegex);
-                bool firstInfo = true;
+
                 for (; infoIt != sregex_iterator(); ++infoIt)
                 {
-                    string info = clean((*infoIt)[1]); // 清理信息文字
+                    smatch match = *infoIt;
+                    string attrs = match[1];
+                    string info = clean(match[2]); // Group 2 is content
                     if (info.empty())
                         continue;
-                    if (firstInfo)
+
+                    // Parse potential metadata from this block
+                    vector<int> currentWeeks = parseWeeks(info);
+                    string currentLocation = formatLocation(info);
+
+                    // Determine if this block is our tooltip
+                    bool isTooltip = attrs.find("scraper-injected-tooltip") != string::npos;
+
+                    if (!currentWeeks.empty())
                     {
-                        // 1. 提取周数部分
-                        regex weekRegex("([0-9\\-,]+周(\\((单|双)\\))?)");
-                        smatch wmatch;
-                        if (regex_search(info, wmatch, weekRegex))
-                            c.weekStr = wmatch.str();
-                        else
-                            c.weekStr = "";
-
-                        c.weeks = parseWeeks(info);        // 解析周数数组
-                        c.location = formatLocation(info); // 提取地点
-
-                        // 2. 提取教师姓名
-                        // (从第一行中剔除周数和地点关键字后的部分)
-                        string teacher = info;
-                        if (!c.weekStr.empty())
+                        if (c.weeks.empty() || isTooltip)
                         {
-                            size_t wpos = teacher.find(c.weekStr);
-                            if (wpos != string::npos)
-                                teacher.erase(wpos, c.weekStr.length());
+                            c.weeks = currentWeeks;
+                            // Extract Week String for logging/cleaning
+                            regex weekRegex("([0-9\\-,]+周(\\((单|双)\\))?)");
+                            smatch wmatch;
+                            if (regex_search(info, wmatch, weekRegex))
+                                c.weekStr = wmatch.str();
                         }
-                        size_t locKeyPos = teacher.find("浑南校区");
-                        if (locKeyPos == string::npos)
-                            locKeyPos = teacher.find("南湖校区");
-                        if (locKeyPos != string::npos)
-                        {
-                            teacher.erase(locKeyPos);
-                        }
-                        else if (!c.location.empty())
-                        {
-                            size_t lpos = teacher.find(c.location);
-                            if (lpos != string::npos)
-                                teacher.erase(lpos, c.location.length());
-                        }
-                        teacher = clean(teacher);
-                        if (!teacher.empty())
-                        {
-                            if (!c.description.empty())
-                                c.description += ",";
-                            c.description += teacher;
-                        }
-
-                        firstInfo = false;
                     }
-                    else
+
+                    if (!currentLocation.empty())
+                    {
+                        if (c.location.empty() || isTooltip)
+                        {
+                            c.location = currentLocation;
+                        }
+                    }
+
+                    string descPart = info;
+
+                    // Tooltip 内容可能包含 <br> 和重复标题，先做一轮清洗
+                    descPart = regex_replace(descPart, regex("<br\\s*/?>"), " ");
+                    descPart = regex_replace(descPart, regex("<[^>]+>"), " ");
+                    while (!c.title.empty())
+                    {
+                        size_t tpos = descPart.find(c.title);
+                        if (tpos == string::npos)
+                            break;
+                        descPart.erase(tpos, c.title.length());
+                    }
+                    if (!c.weekStr.empty())
+                    {
+                        size_t pos = descPart.find(c.weekStr);
+                        if (pos != string::npos)
+                            descPart.replace(pos, c.weekStr.length(), "");
+                    }
+                    if (!c.location.empty())
+                    {
+                        size_t pos = descPart.find(c.location);
+                        if (pos != string::npos)
+                            descPart.replace(pos, c.location.length(), "");
+                    }
+
+                    size_t locKeyPos = descPart.find("浑南校区");
+                    if (locKeyPos == string::npos)
+                        locKeyPos = descPart.find("南湖校区");
+                    if (locKeyPos != string::npos)
+                        descPart.replace(locKeyPos, 12, "");
+
+                    descPart = regex_replace(descPart, regex("^[,，;；:：\\s]+"), "");
+                    descPart = clean(descPart);
+                    if (!descPart.empty())
                     {
                         if (!c.description.empty())
                             c.description += ",";
-                        c.description += info; // 拼接其他信息（通常是教师）
+                        c.description += descPart;
                     }
+                }
+
+                if (c.weeks.empty())
+                {
+                    for (int i = 1; i <= 16; ++i)
+                        c.weeks.push_back(i);
+                    c.weekStr = "1-16周(默)";
                 }
                 if (!c.title.empty())
                 {
